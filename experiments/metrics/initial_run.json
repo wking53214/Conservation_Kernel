@@ -1,0 +1,36 @@
+{
+  "experiment": "CK-001",
+  "steps_requested": 10,
+  "test_suite": "41 passed",
+  "control": {
+    "accepted_transformations": 10,
+    "metrics": {
+      "epistemic_corruption_rate": 0.4,
+      "authority_corruption_rate": 0.2,
+      "provenance_corruption_rate": 0.5,
+      "uncertainty_corruption_rate": 0.4,
+      "temporal_corruption_rate": 0.2,
+      "human_attribution_corruption_rate": 0.1,
+      "canonical_corruption_rate": 0.0,
+      "evidence_corruption_rate": 0.3,
+      "functional_corruption_rate": 0.0
+    }
+  },
+  "treatment": {
+    "accepted_transformations": 10,
+    "rejected_attempts": 5,
+    "blocked_attack_rate": 1.0,
+    "metrics_on_accepted_transformations": {
+      "epistemic_corruption_rate": 0.0,
+      "authority_corruption_rate": 0.0,
+      "provenance_corruption_rate": 0.0,
+      "uncertainty_corruption_rate": 0.0,
+      "temporal_corruption_rate": 0.0,
+      "human_attribution_corruption_rate": 0.0,
+      "canonical_corruption_rate": 0.0,
+      "evidence_corruption_rate": 0.0,
+      "functional_corruption_rate": 0.0
+    }
+  },
+  "interpretation": "Mechanism test only; not a statistically powered claim about production LLMs."
+}
