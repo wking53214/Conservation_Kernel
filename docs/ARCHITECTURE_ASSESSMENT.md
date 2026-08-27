@@ -18,9 +18,14 @@ It is not yet a gateway, service, cryptographic ledger, or LLM integration.
 
 ## Inspected repositories
 
+This section is a point-in-time record of the reconnaissance that preceded
+the decision above (original assessment, August 2026). The heads below are
+frozen as historical evidence of what was reviewed; they are **not** kept in
+sync with the sibling repositories.
+
 The local checkouts were inspected at the following heads:
 
-| Repository | Current local head | Finding relevant to the kernel |
+| Repository | Head at inspection | Finding relevant to the kernel |
 | --- | --- | --- |
 | `CCC` | `7daad9eed81dad8091fa8255f724bf3a38b97e75` | Strong typed provenance/epistemic/evidence/lineage managers; JSON persistence and lower-level store mutation remain distinct from independent transition verification. |
 | `Triad-42` | `ef3b1962e19f8643725ff13014c3052be7428ffd` | Explicit epistemic labels, human authorization, support roots, and erasure cascade; the package intentionally does not perform substantive truth reasoning. |
@@ -34,6 +39,12 @@ The local checkouts were inspected at the following heads:
 The `sentinel_os` checkout contains an unrelated untracked synthetic CSV and a
 permission-restricted `ledger_data` directory. No files there were changed.
 The existing user modifications in `synapsis` were also left untouched.
+
+As of 2026-08-27 several of these repositories have advanced past the
+inspected heads (`CCC`, `Triad-42`, `resume_os`, `observe`, and `synapsis`
+in particular). The findings above were not re-verified against the newer
+state; the kernel still does not import any of these packages, so the
+assessment's conclusion is unaffected.
 
 ## Reusable ideas and unsafe assumptions
 
