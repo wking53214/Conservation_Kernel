@@ -5,8 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "conservation-kernel"
 version = "0.1.0"
-description = "A hostile, independently testable conservation verifier for typed AI transformations"
+description = "Independently testable hostile baseline that checks whether machine-mediated transformations preserve protected epistemic and provenance distinctions"
+readme = "README.md"
 requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "William King" }]
 dependencies = []
 
 [project.optional-dependencies]
