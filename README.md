@@ -179,7 +179,8 @@ boundary where it is actually invoked. A caller who never submits a
 transformation stays outside the mechanism entirely. Universal enforcement
 would require a mandatory transport/gateway boundary, which this library is
 not. This limitation is stated, not hidden — see [`docs/REPORT.md`](docs/REPORT.md),
-where that claim is classified `FALSIFIED`.
+where that claim is classified `FALSIFIED`. A working reference gateway built
+on this kernel is described in [`docs/GATEWAY.md`](docs/GATEWAY.md).
 
 **Cryptography.** SHA-256 is used here for deterministic identity and change
 detection only — not for signatures, custody, authenticity, or tamper-proof
@@ -204,6 +205,7 @@ enforcement architecture.
 | [`docs/MODEL.md`](docs/MODEL.md) | the artifact/proposition model and result semantics |
 | [`docs/INVARIANTS.md`](docs/INVARIANTS.md) | the enforced invariants, enumerated |
 | [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) | assumptions and explicit out-of-scope items |
+| [`docs/GATEWAY.md`](docs/GATEWAY.md) | the transport boundary, its reference implementation, and what makes a gateway sound |
 | [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) | what a passing result does and does not mean |
 | [`docs/HOSTILE_REVIEW.md`](docs/HOSTILE_REVIEW.md) | 20 adversarial questions answered against the implementation |
 | [`docs/REPORT.md`](docs/REPORT.md) | per-claim classification (`TEST-VERIFIED` / `FALSIFIED` / `UNVERIFIED`) |
