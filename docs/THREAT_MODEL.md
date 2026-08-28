@@ -24,3 +24,8 @@ independent evidence are supplied through a separate registry.
 Those limitations are not hidden success conditions. A production deployment
 would need a protocol or gateway boundary, separate custody for the event
 registry, and an independent persistence/witness design.
+
+The gateway boundary specifically now has a working reference implementation
+outside this repo — see [`GATEWAY.md`](GATEWAY.md). It does not change what
+this kernel does or bring bypass into scope; it records what a sound choke
+point looks like and that one has been built and tested against this kernel.

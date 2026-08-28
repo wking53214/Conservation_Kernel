@@ -54,6 +54,10 @@ README's scope than the following documents support:
   questions answered against the implementation, several with `FALSIFIED` or
   `UNVERIFIED`.
 - [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) — explicit out-of-scope list.
+- [`docs/GATEWAY.md`](docs/GATEWAY.md) — the transport boundary is out of
+  scope for the library; it now has a working reference implementation
+  elsewhere, tested against this kernel. That does not move bypass into
+  scope here.
 
 Verified state as of 2026-08-27: `python3 -m pytest -q` → 47 passed; the code
 has no runtime dependencies outside the standard library.
@@ -82,6 +86,13 @@ does not carry a misleading green:
   historical content specifically; a correctly declared content change is
   accepted as `PASS_WITH_DECLARED_TRANSFORMATION`. Whether historical content
   should be a protected dimension is an open invariant question.
+
+The gateway reference implementation noted in
+[`docs/GATEWAY.md`](docs/GATEWAY.md) carries its own attack corpus that
+exercises adjacent cases at the transport layer — `HISTORICAL_REWRITE`,
+`PROVENANCE_MISMATCH`, `METADATA_FORGERY`. That is independent corroboration
+that #10 and #13 name real gaps, not a substitute for the kernel-level
+invariant decision they still need.
 
 ## Related investigation
 
