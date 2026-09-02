@@ -48,9 +48,18 @@ Three properties, all present in the reference implementation:
 
 A gateway missing any of these re-opens the bypass it was meant to close.
 
-## What this does not add
+## Runtime loop safety
 
-No core kernel code changed. The kernel still verifies; it still cannot stop
+Retry exhaustion, repeated-output detection, and A-B/A-B or longer
+oscillation detection are runtime concerns, not conservation invariants. They
+belong in the gateway or orchestration layer, which can retain bounded
+execution state and apply context-specific retry policy. The kernel should
+remain stateless with respect to runtime history and should not reject a
+repeated artifact solely because it was repeated.
+
+## Kernel boundary
+
+The kernel still verifies; it still cannot stop
 an application that refuses to call the gateway. Custody of the gateway's own
 accepted-artifact store, and durable/witnessed persistence, remain separate
 unsolved problems (see [`LIMITATIONS.md`](LIMITATIONS.md)).

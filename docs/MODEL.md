@@ -17,6 +17,19 @@ Propositions have stable IDs across ordinary transformations. Each carries:
 An artifact also carries parent artifact IDs, producer identity, a functional
 contract, a content hash, and a hash of its canonical representation.
 
+## Canonical representation
+
+`canonical_json()` is an identity encoding, not a lossy sanitizer. It converts
+typed values to JSON, sorts object keys, preserves strings and list order, and
+uses UTF-8 bytes for SHA-256. Source content is never rewritten to produce the
+canonical form.
+
+Canonical mappings must use string keys; sets and non-finite floats are
+rejected because their JSON representation is ambiguous or unstable. Unicode,
+whitespace, numeric spelling, list order, timestamps, and caller-assigned
+artifact IDs remain identity-relevant. A future derived representation must
+therefore be explicit and must not replace the preserved source artifact.
+
 `TransformationRecord` is separate from the artifact. It records the input
 and output hashes, transformer, declared changes, evidence references, and
 authorization references. `claimed_validation_results` exists only to test

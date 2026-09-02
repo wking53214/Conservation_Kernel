@@ -12,6 +12,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from hashlib import sha256
+from math import isfinite
 from types import MappingProxyType
 from typing import Any, Mapping
 
@@ -47,9 +48,15 @@ def _plain(value: Any) -> Any:
     if hasattr(value, "to_dict"):
         return value.to_dict()
     if isinstance(value, Mapping):
-        return {str(key): _plain(item) for key, item in value.items()}
-    if isinstance(value, (tuple, list, set)):
+        if any(not isinstance(key, str) for key in value):
+            raise TypeError("canonical mappings require string keys")
+        return {key: _plain(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
         return [_plain(item) for item in value]
+    if isinstance(value, set):
+        raise TypeError("sets are not supported in canonical representations")
+    if isinstance(value, float) and not isfinite(value):
+        raise ValueError("non-finite floats are not supported in canonical representations")
     return value
 
 
@@ -249,9 +256,11 @@ class Proposition:
         if self.canonical_state in {CanonicalState.ACCEPTED, CanonicalState.CANONICAL, CanonicalState.SUPERSEDED, CanonicalState.REVOKED, CanonicalState.DELETED} and not self.authorization_refs:
             raise InvalidArtifact(f"canonical state {self.canonical_state.value} requires authorization_refs")
         try:
-            json.dumps(metadata, sort_keys=True)
+            canonical_json(metadata)
         except (TypeError, ValueError) as exc:
-            raise InvalidArtifact(f"metadata for {self.proposition_id} is not JSON serializable") from exc
+            raise InvalidArtifact(
+                f"metadata for {self.proposition_id} is not canonically serializable: {exc}"
+            ) from exc
         object.__setattr__(self, "metadata", MappingProxyType(metadata))
 
     def to_dict(self) -> dict[str, Any]:
