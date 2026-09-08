@@ -454,10 +454,29 @@ class IndependentVerifier:
         if new.epistemic_status in STRONG_EPISTEMIC:
             if not registry.has_active_evidence(refs, subject_ids=subject_ids, kinds={EvidenceKind.INDEPENDENT_VERIFICATION}, independent=True):
                 violation("NEW_STRONG_CLAIM_UNVERIFIED", Dimension.EPISTEMIC_STATUS, new.proposition_id, "new fact/observation requires independent verification")
+        auth_refs = tuple(dict.fromkeys((*new.authorization_refs, *record.authorization_refs)))
         if new.authority in {AuthorityStatus.HUMAN_AUTHORIZED, AuthorityStatus.CANONICAL, AuthorityStatus.EXECUTED}:
-            auth_refs = tuple(dict.fromkeys((*new.authorization_refs, *record.authorization_refs)))
-            if not any(registry.authorization(ref) for ref in auth_refs):
-                violation("NEW_AUTHORITY_UNVERIFIED", Dimension.AUTHORITY, new.proposition_id, "new authoritative proposition has no registry-backed authorization")
+            # Any authorization used to do: one about an unrelated subject and
+            # transition let a machine create a canonical claim in one step
+            # (measured 2026-09-08). It must be about this proposition or a
+            # parent, and it must grant this authority.
+            if not any(
+                (event := registry.authorization(ref)) is not None
+                and event.subject_id in subject_ids
+                and event.transition_kind is TransitionKind.AUTHORITY_ESCALATION
+                and event.to_value == new.authority.value
+                for ref in auth_refs
+            ):
+                violation("NEW_AUTHORITY_UNVERIFIED", Dimension.AUTHORITY, new.proposition_id, "new authoritative proposition has no registry-backed authorization for this subject and authority")
+        if new.canonical_state in {CanonicalState.ACCEPTED, CanonicalState.CANONICAL, CanonicalState.SUPERSEDED, CanonicalState.REVOKED, CanonicalState.DELETED}:
+            if not any(
+                (event := registry.authorization(ref)) is not None
+                and event.subject_id in subject_ids
+                and event.transition_kind is TransitionKind.CANONICALIZATION
+                and event.to_value == new.canonical_state.value
+                for ref in auth_refs
+            ):
+                violation("NEW_CANONICAL_UNAUTHORIZED", Dimension.CANONICALITY, new.proposition_id, "a new proposition cannot be born in a canonical state without a canonicalization authorization for it")
         if new.canonical_state is CanonicalState.CANONICAL:
             unknown.append("semantic_validity_of_new_canonical_claim")
 
