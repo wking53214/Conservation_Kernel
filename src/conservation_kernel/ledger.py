@@ -71,3 +71,23 @@ class ConservationLedger:
             "transformations": [item.to_dict() for item in self._transformations.values()],
             "reports": [item.to_dict() for item in self._reports],
         }
+
+    @classmethod
+    def restore(cls, snapshot: dict) -> "ConservationLedger":
+        """A ledger rebuilt from `snapshot()`. Every artifact's digests are
+        recomputed and compared on the way in (Artifact.from_dict), so a
+        snapshot whose bytes were altered is refused; whether the lineage in
+        it was ever verified is the kernel's question, see
+        ConservationKernel.from_snapshot."""
+        ledger = cls()
+        for item in snapshot.get("artifacts", []):
+            artifact = Artifact.from_dict(item)
+            ledger._add_artifact(artifact)
+        for item in snapshot.get("transformations", []):
+            record = TransformationRecord.from_dict(item)
+            if record.output_artifact_id not in ledger._artifacts:
+                raise LedgerError(f"snapshot transformation {record.transformation_id} names an output not in the snapshot")
+            ledger._transformations[record.transformation_id] = record
+        for item in snapshot.get("reports", []):
+            ledger._reports.append(VerificationResult.from_dict(item))
+        return ledger

@@ -28,3 +28,14 @@ class RootAdmissionError(LedgerError):
     an authoritative or canonical claim is backed by an authorization for
     that proposition, and that a fact or observation names a source.
     """
+
+
+class SnapshotIntegrityError(LedgerError):
+    """A restored snapshot does not re-verify.
+
+    A restart used to lose everything (the ledger was in memory only), and
+    a hand-written ledger would have been indistinguishable from a verified
+    one. On restore every root is re-admitted and every transformation is
+    re-verified against the restored registry; a snapshot that fails either
+    is refused whole.
+    """

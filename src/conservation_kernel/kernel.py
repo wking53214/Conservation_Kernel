@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from .enums import AuthorityStatus, CanonicalState, EpistemicStatus, TransitionKind
-from .errors import LedgerError, RootAdmissionError
+from .errors import LedgerError, RootAdmissionError, SnapshotIntegrityError
 from .events import TransformationRecord
 from .ledger import ConservationLedger
-from .model import Artifact
+from .model import Artifact, _digest, canonical_json
 from .reconstruction import Reconstruction, ReconstructionEngine
 from .registry import EvidenceRegistry
 from .result import VerificationResult
@@ -109,3 +109,71 @@ class ConservationKernel:
 
     def reconstruct(self, artifact_id: str) -> Reconstruction:
         return self.reconstruction.reconstruct(self.ledger, artifact_id)
+
+    # -- persistence -------------------------------------------------------------
+
+    SNAPSHOT_VERSION = "1.0.0"
+
+    def snapshot(self) -> dict:
+        """Everything needed to continue after a restart, plus a digest of it."""
+        body = {
+            "snapshot_version": self.SNAPSHOT_VERSION,
+            "kernel_version": self.version,
+            "ledger": self.ledger.snapshot(),
+            "registry": self.registry.snapshot(),
+        }
+        body["snapshot_digest"] = _digest(canonical_json(body))
+        return body
+
+    @classmethod
+    def from_snapshot(cls, snapshot: dict, *, trusted_humans=None, reverify: bool = True) -> "ConservationKernel":
+        """A kernel continuing from `snapshot()`.
+
+        The digest is checked first (corruption). Then, with `reverify`, every
+        root is re-admitted and every transformation is re-verified against
+        the restored registry, so a lineage that was written into the file
+        by hand fails the same way it would have failed live. What this does
+        not do is authenticate the file: a snapshot that re-verifies is one
+        the constitution would have accepted, not one this kernel is known to
+        have produced. That needs a signature the deployer holds.
+        """
+        body = dict(snapshot)
+        recorded = body.pop("snapshot_digest", None)
+        if recorded is not None and _digest(canonical_json(body)) != recorded:
+            raise SnapshotIntegrityError("snapshot digest does not recompute; the file was altered")
+        registry = EvidenceRegistry.restore(body.get("registry", {}), trusted_humans=trusted_humans)
+        ledger = ConservationLedger.restore(body.get("ledger", {}))
+        kernel = cls(registry=registry, ledger=ledger)
+        if reverify:
+            kernel.reverify()
+        return kernel
+
+    def reverify(self) -> None:
+        """Re-admit every root and re-verify every transformation now in the ledger."""
+        for artifact in self.ledger.artifacts():
+            if not artifact.parent_artifact_ids:
+                reasons = self.admit_root(artifact)
+                if reasons:
+                    raise SnapshotIntegrityError(f"root {artifact.artifact_id} would not be admitted: " + "; ".join(reasons))
+        for record in self.ledger.transformations():
+            try:
+                inputs = [self.ledger.artifact(i) for i in record.input_artifact_ids]
+                output = self.ledger.artifact(record.output_artifact_id)
+            except KeyError as e:
+                raise SnapshotIntegrityError(f"transformation {record.transformation_id} references an artifact not in the ledger: {e}") from e
+            result = self.verifier.verify(inputs, output, record, self.registry)
+            if not result.accepted:
+                raise SnapshotIntegrityError(
+                    f"transformation {record.transformation_id} does not re-verify: "
+                    + "; ".join(f"{v.code}" for v in result.violations)
+                )
+
+    def save(self, path) -> None:
+        from pathlib import Path
+        Path(path).write_text(canonical_json(self.snapshot()), encoding="utf-8")
+
+    @classmethod
+    def load(cls, path, **kwargs) -> "ConservationKernel":
+        import json
+        from pathlib import Path
+        return cls.from_snapshot(json.loads(Path(path).read_text(encoding="utf-8")), **kwargs)

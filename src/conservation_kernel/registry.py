@@ -106,3 +106,15 @@ class EvidenceRegistry:
             "evidence": [item.to_dict() for item in self._evidence.values()],
             "authorizations": [item.to_dict() for item in self._authorizations.values()],
         }
+
+    @classmethod
+    def restore(cls, snapshot: dict, *, trusted_humans=None) -> "EvidenceRegistry":
+        """A registry rebuilt from `snapshot()`. Authorizations go through
+        add_authorization, so a trusted-humans binding is enforced on
+        restore as it was live."""
+        registry = cls(trusted_humans=trusted_humans)
+        for item in snapshot.get("evidence", []):
+            registry.add_evidence(EvidenceRecord.from_dict(item))
+        for item in snapshot.get("authorizations", []):
+            registry.add_authorization(AuthorizationEvent.from_dict(item))
+        return registry
