@@ -23,6 +23,11 @@ class ObservedChange:
             "after": self.after,
         }
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ObservedChange":
+        return cls(subject_id=data["subject_id"], dimension=Dimension(data["dimension"]),
+                   before=data["before"], after=data["after"])
+
 
 @dataclass(frozen=True)
 class Violation:
@@ -38,6 +43,11 @@ class Violation:
             "subject_id": self.subject_id,
             "detail": self.detail,
         }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Violation":
+        return cls(code=data["code"], dimension=Dimension(data["dimension"]) if data.get("dimension") else None,
+                   subject_id=data.get("subject_id"), detail=data["detail"])
 
 
 @dataclass(frozen=True)
@@ -66,3 +76,16 @@ class VerificationResult:
             "unverifiable_properties": list(self.unverifiable_properties),
             "checked_dimensions": [item.value for item in self.checked_dimensions],
         }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "VerificationResult":
+        return cls(
+            transformation_id=data["transformation_id"],
+            input_artifact_ids=tuple(data["input_artifact_ids"]),
+            output_artifact_id=data["output_artifact_id"],
+            status=VerificationStatus(data["status"]),
+            observed_changes=tuple(ObservedChange.from_dict(item) for item in data.get("observed_changes", [])),
+            violations=tuple(Violation.from_dict(item) for item in data.get("violations", [])),
+            unverifiable_properties=tuple(data.get("unverifiable_properties", [])),
+            checked_dimensions=tuple(Dimension(item) for item in data.get("checked_dimensions", [])),
+        )

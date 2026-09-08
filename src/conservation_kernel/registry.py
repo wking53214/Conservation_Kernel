@@ -15,7 +15,15 @@ class EvidenceRegistry:
     boundary; this in-memory implementation makes that boundary testable.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, trusted_humans: set[str] | frozenset[str] | None = None) -> None:
+        # ActorKind.HUMAN is a self-declaration on a caller-supplied dataclass:
+        # a machine that constructs Actor("agent", kind=HUMAN) mints valid
+        # human authorizations (measured 2026-09-08). The kernel cannot know
+        # who is human; the deployer can. When `trusted_humans` is given, an
+        # authorization is accepted only from an actor id in that set. When
+        # it is None the registry behaves as before, and that fact is the
+        # trust assumption every downstream "human authorized" claim rests on.
+        self.trusted_humans = frozenset(trusted_humans) if trusted_humans is not None else None
         self._evidence: dict[str, EvidenceRecord] = {}
         self._authorizations: dict[str, AuthorizationEvent] = {}
 
@@ -25,6 +33,11 @@ class EvidenceRegistry:
         self._evidence[record.evidence_id] = record
 
     def add_authorization(self, event: AuthorizationEvent) -> None:
+        if self.trusted_humans is not None and event.authorized_by.actor_id not in self.trusted_humans:
+            raise InvalidEvent(
+                f"authorization {event.authorization_id} is by {event.authorized_by.actor_id!r}, "
+                "which this registry does not recognise as a human authorizer"
+            )
         if event.authorization_id in self._authorizations:
             raise InvalidEvent(f"duplicate authorization ID {event.authorization_id}")
         self._authorizations[event.authorization_id] = event
@@ -47,7 +60,11 @@ class EvidenceRegistry:
             item = self._evidence.get(ref)
             if item is None or not item.active:
                 continue
-            if item.subject_id not in subject_ids and item.subject_id != "*":
+            # A wildcard subject counts only where the caller explicitly allows
+            # it (the functional-validation check does). Before this a single
+            # `subject_id="*"` record satisfied every strong claim for every
+            # subject (measured 2026-09-08).
+            if item.subject_id not in subject_ids:
                 continue
             if item.kind not in kinds:
                 continue
@@ -89,3 +106,15 @@ class EvidenceRegistry:
             "evidence": [item.to_dict() for item in self._evidence.values()],
             "authorizations": [item.to_dict() for item in self._authorizations.values()],
         }
+
+    @classmethod
+    def restore(cls, snapshot: dict, *, trusted_humans=None) -> "EvidenceRegistry":
+        """A registry rebuilt from `snapshot()`. Authorizations go through
+        add_authorization, so a trusted-humans binding is enforced on
+        restore as it was live."""
+        registry = cls(trusted_humans=trusted_humans)
+        for item in snapshot.get("evidence", []):
+            registry.add_evidence(EvidenceRecord.from_dict(item))
+        for item in snapshot.get("authorizations", []):
+            registry.add_authorization(AuthorizationEvent.from_dict(item))
+        return registry
