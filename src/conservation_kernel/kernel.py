@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from .enums import AuthorityStatus, CanonicalState, EpistemicStatus, TransitionKind
-from .errors import LedgerError, RootAdmissionError, SnapshotIntegrityError
+from .errors import LedgerError, RootAdmissionError, SnapshotAuthenticityError, SnapshotIntegrityError
 from .events import TransformationRecord
 from .ledger import ConservationLedger
 from .model import Artifact, _digest, canonical_json
@@ -126,7 +126,7 @@ class ConservationKernel:
         return body
 
     @classmethod
-    def from_snapshot(cls, snapshot: dict, *, trusted_humans=None, reverify: bool = True) -> "ConservationKernel":
+    def from_snapshot(cls, snapshot: dict, *, trusted_humans=None, reverify: bool = True, signer=None) -> "ConservationKernel":
         """A kernel continuing from `snapshot()`.
 
         The digest is checked first (corruption). Then, with `reverify`, every
@@ -138,9 +138,18 @@ class ConservationKernel:
         have produced. That needs a signature the deployer holds.
         """
         body = dict(snapshot)
+        signature = body.pop("signature", None)
         recorded = body.pop("snapshot_digest", None)
         if recorded is not None and _digest(canonical_json(body)) != recorded:
             raise SnapshotIntegrityError("snapshot digest does not recompute; the file was altered")
+        if signer is not None:
+            # 0.3.0: a loader that holds a key expects the file to be signed
+            # by it. An unsigned file, or one signed by another key, is not
+            # this deployment's kernel, however well it re-verifies.
+            from .signing import check_signature
+            problem = check_signature(signer, recorded or "", signature)
+            if problem:
+                raise SnapshotAuthenticityError(f"snapshot not authenticated: {problem}")
         registry = EvidenceRegistry.restore(body.get("registry", {}), trusted_humans=trusted_humans)
         ledger = ConservationLedger.restore(body.get("ledger", {}))
         kernel = cls(registry=registry, ledger=ledger)
@@ -168,9 +177,14 @@ class ConservationKernel:
                     + "; ".join(f"{v.code}" for v in result.violations)
                 )
 
-    def save(self, path) -> None:
+    def save(self, path, *, signer=None) -> None:
+        """Write the snapshot; with a signer, sign its digest with the deployer's key."""
         from pathlib import Path
-        Path(path).write_text(canonical_json(self.snapshot()), encoding="utf-8")
+        body = self.snapshot()
+        if signer is not None:
+            from .signing import signature_block
+            body["signature"] = signature_block(signer, body["snapshot_digest"])
+        Path(path).write_text(canonical_json(body), encoding="utf-8")
 
     @classmethod
     def load(cls, path, **kwargs) -> "ConservationKernel":
