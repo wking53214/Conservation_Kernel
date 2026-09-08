@@ -1,9 +1,7 @@
 from dataclasses import replace
 
 from conservation_kernel.enums import Dimension, VerificationStatus
-from conservation_kernel.events import DeclaredChange
 from conservation_kernel.experiments import build_ground_truth, legitimate_transformation
-from conservation_kernel.result import VerificationResult
 from conservation_kernel.verifier import IndependentVerifier
 
 

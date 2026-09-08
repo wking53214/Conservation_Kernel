@@ -31,6 +31,8 @@ from .registry import EvidenceRegistry
 from .result import ObservedChange, VerificationResult, Violation
 from .verifier import IndependentVerifier
 
+__version__ = "0.1.0"
+
 __all__ = [
     "Actor",
     "ActorKind",

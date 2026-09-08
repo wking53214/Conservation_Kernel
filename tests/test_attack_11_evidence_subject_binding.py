@@ -2,7 +2,6 @@ from dataclasses import replace
 
 from conservation_kernel.enums import (
     Dimension,
-    EpistemicStatus,
     TransitionKind,
     VerificationStatus,
 )
