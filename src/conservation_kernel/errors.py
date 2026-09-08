@@ -39,3 +39,12 @@ class SnapshotIntegrityError(LedgerError):
     re-verified against the restored registry; a snapshot that fails either
     is refused whole.
     """
+
+
+class SnapshotAuthenticityError(LedgerError):
+    """A snapshot's signature is missing, is by another key, or does not verify.
+
+    Integrity (0.2.0) proved a file was not corrupted; it did not prove who
+    wrote it. When the loader is given a signer, the snapshot must carry a
+    signature by that key over its digest, or it is refused whole.
+    """

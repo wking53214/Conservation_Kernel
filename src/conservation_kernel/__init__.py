@@ -28,12 +28,15 @@ from .ledger import ConservationLedger
 from .kernel import ConservationKernel
 from .model import Artifact, Actor, FunctionalContract, Proposition, TemporalMetadata, Uncertainty
 from .registry import EvidenceRegistry
+from .signing import HmacSigner, Signer
 from .result import ObservedChange, VerificationResult, Violation
 from .verifier import IndependentVerifier
 
-__version__ = "0.1.0"
+__version__ = "0.3.0"
 
 __all__ = [
+    "HmacSigner",
+    "Signer",
     "Actor",
     "ActorKind",
     "Artifact",
