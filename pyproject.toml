@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "conservation-kernel"
-version = "0.1.0"
+version = "0.2.0"
 description = "Independently testable hostile baseline that checks whether machine-mediated transformations preserve protected epistemic and provenance distinctions"
 readme = "README.md"
 requires-python = ">=3.11"
