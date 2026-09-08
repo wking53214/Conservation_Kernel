@@ -35,6 +35,13 @@ PYTHONPATH=src python3 experiments/run_experiment.py   # control/treatment exper
 
 ---
 
+## Public API
+
+Everything a consumer should import is exported from `conservation_kernel`
+and listed in its `__all__`; anything else is internal and may change. The
+version is `conservation_kernel.__version__`, and releases are recorded in
+[`CHANGELOG.md`](CHANGELOG.md) and tagged `v<version>`.
+
 ## Repository layout
 
 ```
