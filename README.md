@@ -1,247 +1,110 @@
-# Conservation Kernel
+# Conservation_Kernel
 
-**Role in the governed action stack:** CONSERVATION — after policy decision, before (or as a condition of) trusted downstream use.
+Independently testable **hostile baseline** for transformation conservation. Version as tagged (`CHANGELOG.md`; live path pins `25145aa` / 0.3.0). Stdlib only. Python ≥ 3.11.
+
+## 1. Pipeline Position & Role
+
+**CONSERVATION.** After policy decision, before trusted downstream use / execution.
 
 ```text
-Admission → OBSERVE / Keys → Locks → PERCEIVE → Decision → Conservation (this repo) → Execution → Custody
+Admission → Observe/Keys → Locks → PERCEIVE → Decision
+    → Conservation (this repo)
+    → Execution → Custody
 ```
 
-Wired into the live path by [observe-perceive](https://github.com/wking53214/observe-perceive) (`perceive_conservation_adapter.py`). Hard dependency for a full conserved orchestrator path.
+Hard dependency of [`observe-perceive`](https://github.com/wking53214/observe-perceive) (`perceive_conservation_adapter.py`, orchestrator Phase 3). [`sentinel_os`](https://github.com/wking53214/sentinel_os) also fail-closes ledger writes through `conservation/boundary.py` onto this verifier.
 
-**Question it answers:** Did this transformation preserve protected epistemic and provenance distinctions — or did it silently change one of them?
+Question: *did this transformation preserve protected epistemic and provenance distinctions, or did it silently change one of them?*  
+Not: *is this claim true?* *is this request permitted?* *was a human authorization issued?* (The kernel **checks** registered authorization events; it does **not issue** them.)
 
-**Not:** Is this claim true? Is this request permitted under policy? (PERCEIVE.) Was a human authorization issued? (Requires registered authorization events; the kernel checks them, it does not issue them.)
+## 2. Full System Scope & Architectural Depth
 
----
-
-## Adversarial enforcement of epistemic conservation
-
-The Conservation Kernel is a small, independently testable mechanism for
-checking whether a machine-mediated transformation preserved the properties
-that were supposed to remain conserved.
-
-Its question is **not**:
-
-> "Is this claim true?"
-
-It is:
-
-> "Did this transformation preserve provenance, evidence, authority,
-> certainty, and historical state — or did it silently change one of them?"
-
-A transformation can produce plausible-looking output while quietly promoting
-an inference to a fact, detaching a claim from its source, or rewriting a
-historical record. The kernel exists to make those changes detectable at the
-transformation boundary.
-
----
-
-## Install and run
-
-Python 3.11+, no runtime dependencies outside the standard library.
-
-```bash
-python3 -m pip install -e ".[dev]"      # dev install (pytest only)
-
-python3 -m pytest -q                     # the test + hostile-attack suite
-PYTHONPATH=src python3 experiments/run_experiment.py   # control/treatment experiment
-```
-
----
-
-## Public API
-
-Everything a consumer should import is exported from `conservation_kernel`
-and listed in its `__all__`; anything else is internal and may change. The
-version is `conservation_kernel.__version__`, and releases are recorded in
-[`CHANGELOG.md`](CHANGELOG.md) and tagged `v<version>`.
-
-## Repository layout
+The kernel compares an immutable **input artifact** + a **declared transformation** against **independently recomputed observed effects**, using **external registries** as the trust boundary.
 
 ```
-src/conservation_kernel/
-    enums.py            closed vocabularies (epistemic status, origin, authority, ...)
-    model.py            immutable Artifact / Proposition / envelope types + canonical hashing
-    events.py           DeclaredChange, AuthorizationEvent, EvidenceRecord, TransformationRecord
-    registry.py         EvidenceRegistry — the external witness / trust boundary
-    verifier.py         IndependentVerifier — recomputes observed changes, never trusts declarations
-    result.py           VerificationResult (PASS / PASS_WITH_DECLARED_TRANSITIONS / REJECT / UNVERIFIABLE)
-    ledger.py           append-only (by API) artifact + transformation store
-    reconstruction.py   rebuild history and per-proposition timelines from the ledger
-    kernel.py           ConservationKernel façade: register_root -> submit -> reconstruct
-    experiments.py      deterministic hostile corpus + the control/treatment experiment
-tests/                  unit tests and numbered hostile-attack regressions
-docs/                   architecture assessment, model, invariants, threat model, hostile review
-experiments/            executable experiment entrypoint and recorded metrics
+INPUT ARTIFACT + DECLARED CHANGE + OBSERVED EFFECTS + EVIDENCE/AUTH REGISTRY
+        → ConservationKernel.submit
+        → PASS | PASS_WITH_DECLARED_TRANSFORMATION | REJECT | UNVERIFIABLE
 ```
 
----
+### Closed vocabularies (`enums.py`)
 
-## How it works
+- `ActorKind`: HUMAN / MODEL / SYSTEM / EXTERNAL
+- `EpistemicStatus`: FACT, OBSERVATION, INFERENCE, ESTIMATED, UNKNOWN, CONFLICTED, SIMULATED, ASSUMPTION, RECOMMENDATION, DECISION
+- `AuthorityStatus`: NONE, PROPOSED, HUMAN_AUTHORIZED, CANONICAL, EXECUTED
+- `OriginStatus`: HUMAN_ORIGINATED, MACHINE_ORIGINATED, HUMAN_ADOPTED_MACHINE_OUTPUT, EXTERNAL_ORIGINATED
+- `UncertaintyState`, `TemporalScope`, `CanonicalState`
+- `Dimension`: CONTENT, PROVENANCE, EPISTEMIC_STATUS, AUTHORITY, HUMAN_ORIGIN, UNCERTAINTY, LINEAGE, …
 
-The kernel operates over explicit, immutable **input** and **output**
-artifacts plus a **declared transformation** and **external registries**:
+### Mechanics
 
-```
-    IMMUTABLE INPUT ARTIFACT
-          +  DECLARED TRANSFORMATION   (what was supposed to change)
-          +  OBSERVED EFFECTS          (what the verifier recomputes independently)
-          +  EXTERNAL EVIDENCE / AUTHORIZATION REGISTRY
-                     │
-                     ▼
-          CONSERVATION EVALUATION
-                     │
-              ┌──────┴──────┐
-           PRESERVED     VIOLATED
-              │             │
-              ▼             ▼
-           ACCEPT         REJECT
-```
+- **`Proposition` / `Artifact`**: proposition-oriented envelope. Wording may change while each proposition keeps explicit epistemic/authority/origin state. Canonical JSON → SHA-256 (`canonical_json` / `_digest`). Sets forbidden; non-finite floats forbidden.
+- **`IndependentVerifier`**: recomputes observed changes; **never trusts the declaration string**. Undeclared shifts → REJECT.
+- **`EvidenceRegistry`**: external witness. Source-reference changes require a registered source observation.
+- **`AuthorizationEvent`**: checked, not issued. If the transformer can write the authorization registry, independence is gone (`docs/LIMITATIONS.md`).
+- **`ConservationLedger`**: append-only **by API**, in-memory. SHA-256 detects inconsistency on recompute; it is not a tamper-proof durable store.
+- **`ConservationKernel` façade**: `register_root` → `submit` → `reconstruct`. Root admission and born-authoritative rules exist (0.2.0+). Signed snapshots in 0.3.0 (`signing.py`).
+- **Hostile corpus** (`experiments.py`, numbered `test_attack_0*.py`): cross-subject authorization, recursive self-verification, provenance forgery, evidence-subject binding, human-origin reclassification, evidence deactivation.
 
-- **Immutable input/output.** Comparison is against fixed representations with
-  deterministic SHA-256 identity, not mutable application state.
-- **Declared vs. observed.** A transformation declares what it intended to
-  change. The verifier recomputes what actually changed, field by field, and
-  requires the two to match — every observed change must be declared, and
-  every declared change must be observed.
-- **External registries.** Evidence and human authorization live in a
-  separate `EvidenceRegistry`, not inside the artifact. A transformer can
-  *name* an authorization ID, but only a registered event created by a human
-  actor satisfies a human-authorization check.
-- **Fail closed.** If a required condition cannot be established, the result
-  is not `PASS`.
+Natural-language semantic equivalence is **unverifiable** when content changes. `PASS_WITH_DECLARED_TRANSFORMATION` means envelope invariants survived, not that a summary preserved every nuance.
 
-Content may change freely; when it does, the result explicitly reports
-semantic content equivalence as **unverified** rather than implying the
-meaning was preserved.
+## 3. What It Does NOT Do / Non-Goals
 
----
+- Does **not** judge truth, usefulness, or policy permission.
+- Does **not** issue authorization or manage grant lifecycle.
+- Does **not** execute.
+- Does **not** provide KMS/HSM, authenticity, or non-repudiation (HMAC/signatures in 0.3.0 are snapshot authenticity for a deployed key, not a grant protocol).
+- Does **not** crypto-shred. Canonical fields are hashed in the clear.
+- Does **not** replace Gateway admission, PERCEIVE gates, or sentinel_os Postgres custody.
 
-## What is conserved
+## 4. Brutally Honest Current Status & Gaps
 
-The verifier treats these proposition-level distinctions as protected. Each
-may change only when the output, declaration, and registry records jointly
-satisfy the relevant transition rule:
+| Gap | Detail |
+|---|---|
+| In-memory ledger | Durable custody is sentinel_os / observe-perceive JSONL, not this package. |
+| Trust boundary | Registry independence is a **deployment** property. Nothing stops a caller from stuffing HUMAN_AUTHORIZED events. |
+| NL equivalence | Explicitly unverified. |
+| Vocab drift | Gateway epistemic enum ≠ this enum. Adapters must map. |
+| Pinned by consumers | observe-perceive and sentinel_os pin `25145aa`. Do not "fix" the default branch without re-running those suites. |
+| Not a product | Commercial red team: receipt library is a **component of the spine**, not a purchase. |
+| No Raft, no multi-region | Single-process verifier. |
 
-| Property | Silent change that is rejected |
-| --- | --- |
-| **Provenance** | source references stripped or substituted |
-| **Evidence** | support removed while the claim still presents as supported; unregistered evidence added |
-| **Authority** | `PROPOSED` → `HUMAN_AUTHORIZED` / `CANONICAL` without a matching human authorization |
-| **Certainty** | uncertainty collapsed without independent verification |
-| **Epistemic status** | `INFERENCE`/`ESTIMATED`/`CONFLICTED` → `FACT`/`OBSERVATION`; `SIMULATED` → historical fact |
-| **Human origin** | machine-originated content relabelled as human-originated |
-| **Historical / temporal state** | `occurred_at` / `observed_at` / scope changed without an explicit temporal transition |
-| **Lineage** | output parents that are not exactly the declared inputs; new propositions with no root in the input |
-| **Functional contract** | required properties dropped or changed without a functional-validation record |
+`python3 -m pytest -q` (hostile suite included). `PYTHONPATH=src python3 experiments/run_experiment.py` is a simulated control/treatment, **not** a population claim about LLMs.
 
-Model consensus, citations, execution records, and an actor's self-report are
-explicitly **not** accepted as independent verification. The full list is in
-[`docs/INVARIANTS.md`](docs/INVARIANTS.md).
+## 5. Core Invariants & Guarantees
 
----
+- Fail-closed: undeclared protected-dimension shifts REJECT.
+- Recomputation over trust: verifier does not believe `DeclaredChange` text.
+- Actor self-report is not evidence (actor kind is tracked; judgment uses registries).
+- Policy/authorization: kernel checks registered events; it does not mint them.
+- Conservative origin: a human-authored container does not make embedded machine material HUMAN_ORIGINATED.
+- Signed snapshots (0.3.0): unsigned or wrong-key snapshots fail when a signer is configured.
 
-## Hostile baseline
+## 6. Inputs, Outputs & Type Contracts
 
-The kernel is intentionally adversarial. It is not built to make
-transformations look safe; it is built to try to falsify the claim that they
-are.
-
-The test suite reflects this. A strong result is not "test passed" — it is:
-
-```
-HOSTILE TRANSFORMATION ATTEMPTED  ->  INVARIANT HELD  ->  REJECTED
+```python
+from conservation_kernel import ConservationKernel, VerificationResult
+# VerificationResult:
+#   transformation_id, input_artifact_ids, output_artifact_id
+#   status: PASS | PASS_WITH_DECLARED_TRANSFORMATION | REJECT | UNVERIFIABLE
+#   observed_changes, violations, unverifiable_properties, checked_dimensions
+#   .accepted → PASS or PASS_WITH_DECLARED_TRANSFORMATION
 ```
 
-`tests/test_attack_*.py` and the corpus in `experiments.py` are numbered
-attempts at *false acceptance*: cross-subject authorization replay, recursive
-self-verification, provenance forgery, evidence deactivation, machine-to-human
-reclassification, and more. `tests/test_transactional_rollback.py` covers a
-related property — a rejected transformation must not mutate the ledger, and a
-legitimate transformation must still succeed afterwards.
+Public surface is `conservation_kernel.__all__`. Everything else is internal.
 
-Two attacks (#10 cross-subject evidence replay, #13 historical-content
-mutation) are documented in [`PROVENANCE.md`](PROVENANCE.md) as **deferred**:
-they require an invariant design decision and are deliberately kept out of the
-suite rather than carried as a misleading pass.
+## 7. Stack Integration Topology
 
----
-
-## The experiment
-
-`experiments/run_experiment.py` runs the same ten transformation boundaries
-through two pipelines:
-
-```
-control:   artifact -> transformer -> next artifact
-treatment: artifact -> transformer -> kernel -> next artifact
+```text
+Gateway ACCEPT
+    → PERCEIVE decision (observe-perceive)
+        → ConservationKernel.submit(input, declared, output)
+                ├── REJECT / UNVERIFIABLE → no execution context issued
+                └── accepted → execution_guard ISSUED → caller callable
+sentinel_os.governance_harness._write_decision
+        → conservation/boundary.py → this verifier → else fail-close ledger write
 ```
 
-At five boundaries the same hostile mutations are attempted. The control (with
-ordinary artifact identity, hashes, timestamps, and a transformation log, but
-no conservation gate) accepts them. The treatment records and rejects all
-five, then performs the legitimate transformation so it still reaches ten
-accepted transformations, and finally reconstructs the full history from the
-ledger without embedding the original content in every downstream artifact.
+Docs: `docs/INVARIANTS.md`, `docs/THREAT_MODEL.md`, `docs/LIMITATIONS.md`, `docs/HOSTILE_REVIEW.md`.
 
-The run is deterministic and uses simulated transformers. It demonstrates the
-mechanics of measurement, not a population-level claim about real systems.
-
----
-
-## Scope and boundaries
-
-**The kernel does not** determine external-world truth, and it is not a fact
-checker, a truth oracle, a complete authorization system, a production
-database, an identity provider, or an AI-governance platform.
-
-**Local vs. universal enforcement.** The kernel enforces conservation at the
-boundary where it is actually invoked. A caller who never submits a
-transformation stays outside the mechanism entirely. Universal enforcement
-would require a mandatory transport/gateway boundary, which this library is
-not. This limitation is stated, not hidden — see [`docs/REPORT.md`](docs/REPORT.md),
-where that claim is classified `FALSIFIED`. A working reference gateway built
-on this kernel is described in [`docs/GATEWAY.md`](docs/GATEWAY.md).
-
-**Cryptography.** SHA-256 is used here for deterministic identity and change
-detection only — not for signatures, custody, authenticity, or tamper-proof
-storage. The ledger is append-only *by API*; it is not a durable tamper-proof
-store. See [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) and
-[`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md).
-
-**Relationship to governance.** A governance system decides *which* properties
-are protected, *who* has authority, and *what* transitions are permitted. The
-kernel is the lower-level mechanism that checks whether a transformation
-actually preserved those properties. It is the enforcement primitive, not the
-enforcement architecture.
-
----
-
-## Documentation
-
-| File | Contents |
-| --- | --- |
-| [`PROVENANCE.md`](PROVENANCE.md) | what this repo is, its history, deferred work, and what is real vs. aspirational |
-| [`docs/ARCHITECTURE_ASSESSMENT.md`](docs/ARCHITECTURE_ASSESSMENT.md) | why a dedicated project, and the sibling-repo reconnaissance behind it |
-| [`docs/MODEL.md`](docs/MODEL.md) | the artifact/proposition model and result semantics |
-| [`docs/INVARIANTS.md`](docs/INVARIANTS.md) | the enforced invariants, enumerated |
-| [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) | assumptions and explicit out-of-scope items |
-| [`docs/GATEWAY.md`](docs/GATEWAY.md) | the transport boundary, its reference implementation, and what makes a gateway sound |
-| [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) | what a passing result does and does not mean |
-| [`docs/HOSTILE_REVIEW.md`](docs/HOSTILE_REVIEW.md) | 20 adversarial questions answered against the implementation |
-| [`docs/REPORT.md`](docs/REPORT.md) | per-claim classification (`TEST-VERIFIED` / `FALSIFIED` / `UNVERIFIED`) |
-| [`docs/EXPERIMENT.md`](docs/EXPERIMENT.md) | the control/treatment experiment design |
-
----
-
-## Status
-
-An experimental, independently testable hostile baseline. Its value is a
-concrete, testable answer to a narrow question — *can machine-mediated
-transformations be evaluated for preservation of protected epistemic and
-provenance distinctions?* — and a foundation from which mandatory
-transformation-boundary enforcement could be built.
-
-## License
-
-Apache License 2.0 — see [`LICENSE`](LICENSE).
+Apache-2.0.
