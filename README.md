@@ -1,5 +1,19 @@
 # Conservation Kernel
 
+**Role in the governed action stack:** CONSERVATION — after policy decision, before (or as a condition of) trusted downstream use.
+
+```text
+Admission → OBSERVE / Keys → Locks → PERCEIVE → Decision → Conservation (this repo) → Execution → Custody
+```
+
+Wired into the live path by [observe-perceive](https://github.com/wking53214/observe-perceive) (`perceive_conservation_adapter.py`). Hard dependency for a full conserved orchestrator path.
+
+**Question it answers:** Did this transformation preserve protected epistemic and provenance distinctions — or did it silently change one of them?
+
+**Not:** Is this claim true? Is this request permitted under policy? (PERCEIVE.) Was a human authorization issued? (Requires registered authorization events; the kernel checks them, it does not issue them.)
+
+---
+
 ## Adversarial enforcement of epistemic conservation
 
 The Conservation Kernel is a small, independently testable mechanism for
@@ -51,7 +65,7 @@ src/conservation_kernel/
     events.py           DeclaredChange, AuthorizationEvent, EvidenceRecord, TransformationRecord
     registry.py         EvidenceRegistry — the external witness / trust boundary
     verifier.py         IndependentVerifier — recomputes observed changes, never trusts declarations
-    result.py           VerificationResult (PASS / PASS_WITH_DECLARED_TRANSFORMATION / REJECT / UNVERIFIABLE)
+    result.py           VerificationResult (PASS / PASS_WITH_DECLARED_TRANSITIONS / REJECT / UNVERIFIABLE)
     ledger.py           append-only (by API) artifact + transformation store
     reconstruction.py   rebuild history and per-proposition timelines from the ledger
     kernel.py           ConservationKernel façade: register_root -> submit -> reconstruct
