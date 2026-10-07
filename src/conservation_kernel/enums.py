@@ -81,6 +81,7 @@ class Dimension(ValueEnum):
     CANONICALITY = "CANONICALITY"
     FUNCTIONAL_CONTRACT = "FUNCTIONAL_CONTRACT"
     LINEAGE = "LINEAGE"
+    SCOPE = "SCOPE"
 
 
 class TransitionKind(ValueEnum):
@@ -92,6 +93,7 @@ class TransitionKind(ValueEnum):
     CANONICALIZATION = "CANONICALIZATION"
     EVIDENCE_REDACTION = "EVIDENCE_REDACTION"
     FUNCTIONAL_CHANGE = "FUNCTIONAL_CHANGE"
+    SCOPE_WIDENING = "SCOPE_WIDENING"
 
 
 class EvidenceKind(ValueEnum):

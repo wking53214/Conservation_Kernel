@@ -230,6 +230,13 @@ class Proposition:
     source_refs: tuple[str, ...] = field(default_factory=tuple)
     derivation_method: str | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    # Conditions the claim holds under ("only for queue X", "if the wait
+    # exceeds five minutes"). A transformation may add one (narrowing) but
+    # may not drop or reword one without a human SCOPE_WIDENING
+    # authorization: a summary must not turn a conditional claim into an
+    # absolute one. Omitted from to_dict() when empty, so artifacts that
+    # carry none keep the digests they had before this field existed.
+    conditions: tuple[str, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         if not isinstance(self.proposition_id, str) or not self.proposition_id.strip():
@@ -244,7 +251,7 @@ class Proposition:
             object.__setattr__(self, "uncertainty", Uncertainty.from_dict(self.uncertainty))
         if not isinstance(self.temporal, TemporalMetadata):
             object.__setattr__(self, "temporal", TemporalMetadata.from_dict(self.temporal))
-        for name in ("evidence_refs", "authorization_refs", "parent_proposition_ids", "source_refs"):
+        for name in ("evidence_refs", "authorization_refs", "parent_proposition_ids", "source_refs", "conditions"):
             object.__setattr__(self, name, _tuple(getattr(self, name), field_name=name, unique=True))
         metadata = dict(self.metadata or {})
         if self.epistemic_status in {EpistemicStatus.ESTIMATED, EpistemicStatus.SIMULATED} and not str(self.derivation_method or "").strip():
@@ -264,7 +271,7 @@ class Proposition:
         object.__setattr__(self, "metadata", MappingProxyType(metadata))
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result = {
             "proposition_id": self.proposition_id,
             "text": self.text,
             "epistemic_status": self.epistemic_status.value,
@@ -280,6 +287,9 @@ class Proposition:
             "derivation_method": self.derivation_method,
             "metadata": dict(self.metadata),
         }
+        if self.conditions:
+            result["conditions"] = list(self.conditions)
+        return result
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "Proposition":
@@ -302,6 +312,8 @@ class Proposition:
             source_refs=data["source_refs"],
             derivation_method=data["derivation_method"],
             metadata=data["metadata"],
+            # Optional: absent means none, which is how to_dict() writes it.
+            conditions=data.get("conditions", ()),
         )
 
 
