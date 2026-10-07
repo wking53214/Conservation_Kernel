@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- `Proposition.conditions`: an optional list of the circumstances a claim
+  holds under. A transformation may add a condition. Dropping or rewording
+  one is `UNAUTHORIZED_SCOPE_WIDENING`, and a new proposition that leaves out
+  a parent's condition is `CONDITION_DROPPED_IN_DERIVATION`, unless a human
+  `SCOPE_WIDENING` authorization (new `TransitionKind`) covers exactly that
+  change. Condition changes are a new protected `Dimension.SCOPE` and must be
+  declared like any other. A reworded condition counts as dropped: the
+  verifier does not judge whether two wordings mean the same thing.
+- Backward compatible: `conditions` is left out of `to_dict()` when empty and
+  is optional in `from_dict()`, so every existing artifact keeps its digest
+  and every existing snapshot loads and re-verifies unchanged.
+- Source: innovation_os's `CompressionConstraint` (summaries must not widen
+  scope), defined there but never called, carried over ahead of that
+  repository's retirement. Only the scope axis is enforced; certainty and
+  permanence were already covered by `UNCERTAINTY_COLLAPSE` and
+  `UNAUTHORIZED_TEMPORAL_CHANGE`, and significance needs human judgment.
+
 ## 0.1.0 (2026-09-07)
 
 First versioned release. The kernel has been in use as a pinned git

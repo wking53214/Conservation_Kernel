@@ -140,6 +140,7 @@ class IndependentVerifier:
                 (Dimension.PROVENANCE, list(old.source_refs), list(new.source_refs)),
                 (Dimension.PROVENANCE, old.metadata, new.metadata),
                 (Dimension.EPISTEMIC_STATUS, old.derivation_method, new.derivation_method),
+                (Dimension.SCOPE, list(old.conditions), list(new.conditions)),
             )
             for dimension, before, after in fields:
                 if not _same(before, after):
@@ -184,6 +185,7 @@ class IndependentVerifier:
             self._check_authority(old, new, refs, auth_refs, subject_ids, record, registry, violation)
             self._check_uncertainty(old, new, refs, auth_refs, subject_ids, record, registry, violation)
             self._check_temporal(old, new, auth_refs, record, registry, violation)
+            self._check_scope(old, new, auth_refs, registry, violation)
             self._check_evidence_change(old, new, refs, auth_refs, record, registry, violation, unknown)
             self._check_canonical(old, new, refs, auth_refs, subject_ids, record, registry, violation)
             self._check_provenance(old, new, refs, registry, violation, unknown)
@@ -371,6 +373,23 @@ class IndependentVerifier:
         ):
             violation("UNAUTHORIZED_TEMPORAL_CHANGE", Dimension.TEMPORAL_STATE, new.proposition_id, "occurred_at, observed_at, or temporal scope changed without an explicit temporal transition")
 
+    def _check_scope(self, old: Proposition, new: Proposition, auth_refs: tuple[str, ...], registry: EvidenceRegistry, violation) -> None:
+        # Adding a condition narrows the claim and needs no authorization.
+        # Dropping or rewording one widens it (a conditional claim becoming
+        # absolute), which only a human may authorize. A reworded condition
+        # counts as dropped: the verifier cannot judge that two wordings mean
+        # the same thing, so it does not try.
+        if not set(old.conditions) - set(new.conditions):
+            return
+        if not registry.has_authorization(
+            auth_refs,
+            subject_id=new.proposition_id,
+            transition_kind=TransitionKind.SCOPE_WIDENING,
+            from_value=list(old.conditions),
+            to_value=list(new.conditions),
+        ):
+            violation("UNAUTHORIZED_SCOPE_WIDENING", Dimension.SCOPE, new.proposition_id, "a condition the claim held under was dropped or reworded without a human scope-widening authorization")
+
     def _check_evidence_change(self, old: Proposition, new: Proposition, refs: tuple[str, ...], auth_refs: tuple[str, ...], record: TransformationRecord, registry: EvidenceRegistry, violation, unknown: list[str]) -> None:
         old_refs = set(old.evidence_refs)
         new_refs = set(new.evidence_refs)
@@ -479,6 +498,23 @@ class IndependentVerifier:
                 violation("NEW_CANONICAL_UNAUTHORIZED", Dimension.CANONICALITY, new.proposition_id, "a new proposition cannot be born in a canonical state without a canonicalization authorization for it")
         if new.canonical_state is CanonicalState.CANONICAL:
             unknown.append("semantic_validity_of_new_canonical_claim")
+        # A proposition derived from conditional parents (a summary, a merge)
+        # must carry every parent condition forward unless a human authorized
+        # this new proposition's wider scope.
+        inherited = {
+            condition
+            for parent in new.parent_proposition_ids
+            if parent in input_props
+            for condition in input_props[parent].conditions
+        }
+        if inherited - set(new.conditions) and not any(
+            (event := registry.authorization(ref)) is not None
+            and event.subject_id in subject_ids
+            and event.transition_kind is TransitionKind.SCOPE_WIDENING
+            and event.to_value == list(new.conditions)
+            for ref in auth_refs
+        ):
+            violation("CONDITION_DROPPED_IN_DERIVATION", Dimension.SCOPE, new.proposition_id, "a derived proposition dropped a condition its parent held under, without a human scope-widening authorization")
 
     def _check_functional(self, old: Artifact, new: Artifact, record: TransformationRecord, registry: EvidenceRegistry, violation, unknown: list[str]) -> None:
         old_contract = old.functional_contract

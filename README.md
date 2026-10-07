@@ -35,6 +35,7 @@ INPUT ARTIFACT + DECLARED CHANGE + OBSERVED EFFECTS + EVIDENCE/AUTH REGISTRY
 - `OriginStatus`: HUMAN_ORIGINATED, MACHINE_ORIGINATED, HUMAN_ADOPTED_MACHINE_OUTPUT, EXTERNAL_ORIGINATED
 - `UncertaintyState`, `TemporalScope`, `CanonicalState`
 - `Dimension`: CONTENT, PROVENANCE, EPISTEMIC_STATUS, AUTHORITY, HUMAN_ORIGIN, UNCERTAINTY, LINEAGE, …
+- `Proposition.conditions` (optional): the circumstances a claim holds under. Adding one passes; dropping or rewording one (`UNAUTHORIZED_SCOPE_WIDENING`), or deriving a proposition that leaves out a parent's condition (`CONDITION_DROPPED_IN_DERIVATION`), needs a human `SCOPE_WIDENING` authorization. A summary must not turn a conditional claim into an absolute one. Omitted from the digest when empty, so existing artifacts and snapshots are unchanged.
 
 ### Mechanics
 
