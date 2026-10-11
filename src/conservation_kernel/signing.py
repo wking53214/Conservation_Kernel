@@ -39,11 +39,13 @@ class HmacSigner:
 
     algorithm = "hmac-sha256"
 
-    def __init__(self, key: bytes, key_id: str = "default"):
+    def __init__(self, key: bytes, key_id: str):
+        # key_id is required and caller-named. It is never derived from the key,
+        # and no default is accepted, so an unnamed key cannot sign silently.
         if not isinstance(key, (bytes, bytearray)) or len(key) < 16:
             raise ValueError("HmacSigner needs a key of at least 16 bytes")
-        if not key_id:
-            raise ValueError("HmacSigner needs a key_id")
+        if not isinstance(key_id, str) or not key_id:
+            raise ValueError("HmacSigner needs a non-empty key_id")
         self._key = bytes(key)
         self.key_id = key_id
 

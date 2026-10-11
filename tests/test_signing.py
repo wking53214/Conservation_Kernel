@@ -19,7 +19,7 @@ def _kernel():
 
 def test_signer_rejects_short_keys_and_empty_ids():
     with pytest.raises(ValueError):
-        HmacSigner(b"short")
+        HmacSigner(b"short", key_id="k1")
     with pytest.raises(ValueError):
         HmacSigner(KEY, key_id="")
 
@@ -46,7 +46,7 @@ def test_signed_snapshot_loads_with_the_same_key(tmp_path):
 def test_unsigned_snapshot_is_refused_by_a_loader_that_holds_a_key(tmp_path):
     _kernel().save(tmp_path / "k.json")
     with pytest.raises(SnapshotAuthenticityError, match="no signature"):
-        ConservationKernel.load(tmp_path / "k.json", signer=HmacSigner(KEY))
+        ConservationKernel.load(tmp_path / "k.json", signer=HmacSigner(KEY, key_id="k1"))
 
 
 def test_snapshot_signed_by_another_key_is_refused(tmp_path):
@@ -77,7 +77,7 @@ def test_a_consistent_forgery_with_a_recomputed_digest_is_refused(tmp_path):
 
 
 def test_corruption_is_still_reported_as_integrity_not_authenticity(tmp_path):
-    s = HmacSigner(KEY)
+    s = HmacSigner(KEY, key_id="k1")
     path = tmp_path / "k.json"
     _kernel().save(path, signer=s)
     path.write_text(path.read_text().replace("observed", "altered"))
@@ -88,3 +88,11 @@ def test_corruption_is_still_reported_as_integrity_not_authenticity(tmp_path):
 def test_an_unsigned_snapshot_still_loads_without_a_key(tmp_path):
     _kernel().save(tmp_path / "k.json")
     assert ConservationKernel.load(tmp_path / "k.json").ledger.artifact("root-1")
+
+
+def test_key_id_has_no_default():
+    """A key with no named key_id must not be accepted. The old default was 'default'."""
+    import pytest as _pytest
+
+    with _pytest.raises(TypeError):
+        HmacSigner(KEY)  # type: ignore[call-arg]
