@@ -16,9 +16,9 @@ dependencies = []
 dev = ["pytest>=8"]
 # Optional: lets the kernel's verdicts be expressed as CNS gate results. The
 # kernel imports nothing from CNS unless conservation_kernel.cns_connector is
-# used. Pinned to tag v1.4.0.
+# used. Pinned to tag v1.5.1.
 cns = [
-    "cns @ git+https://github.com/wking53214/cns.git@3b465dbcc1a6a4ab6f1040f93d44483196abd737",
+    "cns @ git+https://github.com/wking53214/cns.git@da9ab8c8c47097b38ad9792dec23fed45d31ae3f",
 ]
 
 [tool.pytest.ini_options]

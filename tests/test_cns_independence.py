@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 PACKAGE = SRC / "conservation_kernel"
 
-CNS_SHA = "3b465dbcc1a6a4ab6f1040f93d44483196abd737"
+CNS_SHA = "da9ab8c8c47097b38ad9792dec23fed45d31ae3f"
 
 BLOCK = "import sys; sys.modules['cns'] = None; sys.modules['cns.gate'] = None\n"
 
