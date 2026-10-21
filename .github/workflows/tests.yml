@@ -32,3 +32,32 @@ jobs:
         run: PYTHONPATH=src python experiments/run_experiment.py
       - name: Lint (hard gate)
         run: ruff check .
+
+  cns:
+    # The job above installs only `.[dev]`, so tests/test_cns_connector.py
+    # skips there as a module and a green check says nothing about the
+    # connector. This job installs the cns extra and sets
+    # CONSERVATION_KERNEL_REQUIRE_CNS=1, which turns a missing cns into a
+    # failure, so the connector tests cannot silently skip here. Only the
+    # interpreters CNS supports (3.10 or newer).
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install with the cns extra
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ruff==0.15.22
+          python -m pip install -e ".[dev,cns]"
+      - name: Test with CNS required
+        env:
+          CONSERVATION_KERNEL_REQUIRE_CNS: "1"
+        run: python -m pytest -q -rs

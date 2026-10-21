@@ -6,15 +6,19 @@ environments, is in ``test_cns_independence.py`` and never skips.
 
 from __future__ import annotations
 
+import os
 import traceback
 from dataclasses import replace
 
 import pytest
 
-cns_gate = pytest.importorskip(
-    "cns.gate",
-    reason="cns not installed; run in an environment with conservation-kernel[cns]",
-)
+if os.environ.get("CONSERVATION_KERNEL_REQUIRE_CNS") == "1":  # CI: a missing cns is a failure, not a skip
+    import cns.gate as cns_gate
+else:
+    cns_gate = pytest.importorskip(
+        "cns.gate",
+        reason="cns not installed; run in an environment with conservation-kernel[cns]",
+    )
 
 from conservation_kernel import (  # noqa: E402
     Actor,
