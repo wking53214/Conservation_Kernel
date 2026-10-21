@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 PACKAGE = SRC / "conservation_kernel"
 
-CNS_SHA = "da9ab8c8c47097b38ad9792dec23fed45d31ae3f"
+CNS_TAG = "v1.9.0"
 
 BLOCK = "import sys; sys.modules['cns'] = None; sys.modules['cns.gate'] = None\n"
 
@@ -292,5 +292,5 @@ def test_the_package_declares_no_runtime_dependency_and_pins_the_extra():
     extras = data["project"]["optional-dependencies"]
     assert set(extras) == {"dev", "cns"}
     (requirement,) = extras["cns"]
-    assert requirement.startswith("cns @ git+https://github.com/wking53214/cns.git@")
-    assert requirement.endswith(CNS_SHA)
+    assert requirement.startswith("cns @ git+https://github.com/wking53214/CNS.git@")
+    assert requirement.endswith(CNS_TAG)
