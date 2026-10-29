@@ -1139,3 +1139,23 @@ def test_each_end_is_placed_where_cns_expects_it_and_resolves_fail_closed():
     admitted = chain.alpha[0].check(base)
     assert cns_gate.resolve([admitted, clean]) is PASS
     assert cns_gate.resolve([refused, clean]) is BREACH
+
+
+# -- a roster can insist that the kernel carries a root guard ----------------
+
+def test_the_root_gate_judges_an_unguarded_kernel_as_before_by_default():
+    from conservation_kernel import ConservationKernel
+    from conservation_kernel.cns_connector import CnsRootAdmissionGate
+    from tests.test_root_guard import root as guard_root
+    result = CnsRootAdmissionGate(ConservationKernel()).check(guard_root())
+    assert result.outcome.value == "pass"
+
+
+def test_require_guard_refuses_a_kernel_with_no_guard_and_passes_one_with_a_guard():
+    from conservation_kernel import ConservationKernel
+    from conservation_kernel.cns_connector import CnsRootAdmissionGate
+    from tests.test_root_guard import root as guard_root
+    refused = CnsRootAdmissionGate(ConservationKernel(), require_guard=True).check(guard_root())
+    assert refused.outcome.value == "terminal_breach" and "no root guard" in refused.reason
+    allowed = CnsRootAdmissionGate(ConservationKernel(root_guard=lambda a: False), require_guard=True).check(guard_root())
+    assert allowed.outcome.value == "pass"

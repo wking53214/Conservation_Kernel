@@ -43,6 +43,12 @@ class ConservationKernel:
         self.ledger = ledger or ConservationLedger(root_guard=root_guard)
         self.reconstruction = ReconstructionEngine()
 
+    @property
+    def has_root_guard(self) -> bool:
+        """Whether this kernel registers a root only with a guard's permission. A caller deciding whether to
+        trust this kernel with an approval can read this; it cannot be turned off after construction."""
+        return self.ledger.has_root_guard
+
     STRONG_EPISTEMIC = frozenset({EpistemicStatus.FACT, EpistemicStatus.OBSERVATION})
     AUTHORITATIVE = frozenset({AuthorityStatus.HUMAN_AUTHORIZED, AuthorityStatus.CANONICAL, AuthorityStatus.EXECUTED})
     CANONICAL_STATES = frozenset({CanonicalState.ACCEPTED, CanonicalState.CANONICAL, CanonicalState.SUPERSEDED,

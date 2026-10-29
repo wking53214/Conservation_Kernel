@@ -87,3 +87,10 @@ def test_a_guard_and_a_supplied_ledger_cannot_both_be_given_to_the_kernel():
     kernel = ConservationKernel(ledger=ConservationLedger(root_guard=Guard(False)))
     with pytest.raises(RootAdmissionError):
         kernel.register_root(root())
+
+
+def test_a_kernel_says_whether_it_carries_a_guard():
+    assert ConservationKernel().has_root_guard is False
+    assert ConservationKernel(root_guard=Guard()).has_root_guard is True
+    assert ConservationKernel(ledger=ConservationLedger(root_guard=Guard())).has_root_guard is True
+    assert ConservationLedger().has_root_guard is False

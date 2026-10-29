@@ -27,6 +27,11 @@ class ConservationLedger:
         self._transformations: dict[str, TransformationRecord] = {}
         self._reports: list[VerificationResult] = []
 
+    @property
+    def has_root_guard(self) -> bool:
+        """Whether adding an initial artifact depends on a guard. Says nothing about what the guard will answer."""
+        return self._root_guard is not None
+
     def add_initial(self, artifact: Artifact) -> None:
         if artifact.parent_artifact_ids:
             raise LedgerError("an initial artifact cannot already have parents")
