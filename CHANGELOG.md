@@ -20,6 +20,11 @@
   issues approvals can insist the kernel will actually ask. Default is
   `False`, the old behaviour. Nothing here forbids building an unguarded
   kernel; that stays the constructor's choice.
+- Deprecated: building a `ConservationKernel` with no root guard now emits a
+  `DeprecationWarning`. It still registers any root it admits. A future version
+  will require a guard. Pass `allow_unguarded_roots=True` to mark the choice as
+  deliberate and silence the warning. Python hides DeprecationWarning by default
+  outside `__main__` and test runners, so run with `-W default` to see it.
   Without a guard nothing changes: the guard narrows who can register a root
   only for a kernel that was built with one.
 

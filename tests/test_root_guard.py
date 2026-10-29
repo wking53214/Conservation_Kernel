@@ -94,3 +94,32 @@ def test_a_kernel_says_whether_it_carries_a_guard():
     assert ConservationKernel(root_guard=Guard()).has_root_guard is True
     assert ConservationKernel(ledger=ConservationLedger(root_guard=Guard())).has_root_guard is True
     assert ConservationLedger().has_root_guard is False
+
+
+# -- an unguarded kernel is deprecated, not refused ---------------------------
+
+import warnings  # noqa: E402
+
+
+def _warnings_building(**kwargs):
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        kernel = ConservationKernel(**kwargs)
+    return kernel, [w for w in caught if issubclass(w.category, DeprecationWarning)]
+
+
+def test_a_kernel_built_without_a_guard_warns_but_still_registers_roots():
+    kernel, caught = _warnings_building()
+    assert len(caught) == 1 and "root_guard" in str(caught[0].message)
+    assert caught[0].filename == __file__  # points at the caller, not at the kernel
+    kernel.register_root(root())
+    assert [a.artifact_id for a in kernel.ledger.artifacts()] == ["root-1"]
+
+
+def test_a_guarded_kernel_does_not_warn():
+    assert _warnings_building(root_guard=Guard())[1] == []
+    assert _warnings_building(ledger=ConservationLedger(root_guard=Guard()))[1] == []
+
+
+def test_saying_the_choice_is_deliberate_silences_the_warning():
+    assert _warnings_building(allow_unguarded_roots=True)[1] == []
