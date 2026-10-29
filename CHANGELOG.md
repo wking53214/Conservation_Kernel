@@ -14,6 +14,12 @@
   and the duplicate-id check, so a one-shot permission is not spent on a root
   that would be refused anyway. Restoring a snapshot does not ask it. The
   kernel imports nothing to build a guard; a composition layer supplies one.
+- `kernel.has_root_guard` and `ledger.has_root_guard`: whether a kernel registers
+  a root only with a guard's permission. `CnsRootAdmissionGate(kernel,
+  require_guard=True)` refuses a kernel built without one, so a roster that
+  issues approvals can insist the kernel will actually ask. Default is
+  `False`, the old behaviour. Nothing here forbids building an unguarded
+  kernel; that stays the constructor's choice.
   Without a guard nothing changes: the guard narrows who can register a root
   only for a kernel that was built with one.
 

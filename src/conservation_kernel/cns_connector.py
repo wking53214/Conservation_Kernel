@@ -535,15 +535,23 @@ class CnsRootAdmissionGate:
     registry and the ledger, writes nothing, and returns the answer as a bound
     ``GateResult``. It does not register the root;
     ``ConservationKernel.register_root`` does.
+
+    With ``require_guard=True`` the gate also refuses (``TERMINAL_BREACH``) any
+    kernel built without a root guard. An approval for a root is only worth
+    something if the kernel it was issued for will not register a root without
+    one, so a roster that issues approvals should say so. The default is
+    ``False``, which judges the root exactly as before.
     """
 
     name = ROOT_GATE_NAME
 
-    def __init__(self, kernel: ConservationKernel, *, subject: str = DEFAULT_ROOT_SUBJECT) -> None:
+    def __init__(self, kernel: ConservationKernel, *, subject: str = DEFAULT_ROOT_SUBJECT,
+                 require_guard: bool = False) -> None:
         _cns_gate()  # fail here, at construction, not on first use
         _require_subject(subject)
         self._kernel = kernel
         self._subject = subject
+        self._require_guard = require_guard
 
     @property
     def position(self) -> Any:
@@ -554,9 +562,11 @@ class CnsRootAdmissionGate:
             raise TypeError(
                 f"root admission judges an Artifact; got {type(candidate).__name__}"
             )
-        return admission_to_cns_result(
-            root_refusals(self._kernel, candidate), candidate, subject=self._subject
-        )
+        reasons = root_refusals(self._kernel, candidate)
+        if self._require_guard and not self._kernel.has_root_guard:
+            reasons = (*reasons, "this kernel has no root guard, so nothing stops it registering a root "
+                                 "without an approved decision")
+        return admission_to_cns_result(reasons, candidate, subject=self._subject)
 
 
 def cns_chain(
