@@ -93,13 +93,14 @@ class ConservationLedger:
         }
 
     @classmethod
-    def restore(cls, snapshot: dict) -> "ConservationLedger":
+    def restore(cls, snapshot: dict, *, root_guard: Callable[[Artifact], bool] | None = None) -> "ConservationLedger":
         """A ledger rebuilt from `snapshot()`. Every artifact's digests are
         recomputed and compared on the way in (Artifact.from_dict), so a
         snapshot whose bytes were altered is refused; whether the lineage in
         it was ever verified is the kernel's question, see
-        ConservationKernel.from_snapshot."""
-        ledger = cls()
+        ConservationKernel.from_snapshot. The roots in the snapshot are not put to
+        `root_guard` (they were guarded, or not, when first registered); it guards roots added after."""
+        ledger = cls(root_guard=root_guard)
         for item in snapshot.get("artifacts", []):
             artifact = Artifact.from_dict(item)
             ledger._add_artifact(artifact)

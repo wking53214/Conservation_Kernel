@@ -18,15 +18,18 @@
   a root only with a guard's permission. `CnsRootAdmissionGate(kernel,
   require_guard=True)` refuses a kernel built without one, so a roster that
   issues approvals can insist the kernel will actually ask. Default is
-  `False`, the old behaviour. Nothing here forbids building an unguarded
-  kernel; that stays the constructor's choice.
-- Deprecated: building a `ConservationKernel` with no root guard now emits a
-  `DeprecationWarning`. It still registers any root it admits. A future version
-  will require a guard. Pass `allow_unguarded_roots=True` to mark the choice as
-  deliberate and silence the warning. Python hides DeprecationWarning by default
-  outside `__main__` and test runners, so run with `-W default` to see it.
-  Without a guard nothing changes: the guard narrows who can register a root
-  only for a kernel that was built with one.
+  `False`, the old behaviour.
+- Breaking: a `ConservationKernel` must be built with a root guard. Building one
+  with none raises `UnguardedKernelError`, because it would register any root it
+  admits with no approved decision required. Pass `root_guard=...`, or pass
+  `allow_unguarded_roots=True` to say that is deliberate (a test, a tool that
+  never registers roots). The flag is greppable on purpose: it marks every place
+  that has not yet decided what authorizes a root. `from_snapshot` and `load`
+  take the same two arguments, and `ConservationLedger.restore` takes
+  `root_guard`; roots already in a snapshot are not put to the guard. This
+  replaces the DeprecationWarning released a day earlier (#19), which was only a
+  day old: callers that pin a commit are unaffected until they bump, and a
+  bump now needs one of the two arguments.
 
 - `Proposition.conditions`: an optional list of the circumstances a claim
   holds under. A transformation may add a condition. Dropping or rewording

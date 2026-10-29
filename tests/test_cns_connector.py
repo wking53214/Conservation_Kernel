@@ -191,7 +191,7 @@ def _pinned_candidate():
 
 
 def _twin(base, registry):
-    kernel = ConservationKernel(registry=registry)
+    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry)
     kernel.register_root(base)
     return kernel
 
@@ -411,7 +411,7 @@ def test_submit_to_cns_lets_a_kernel_error_that_is_not_a_ledger_refusal_propagat
         def verify(self, input_artifacts, output, record, registry):
             raise RuntimeError("the verifier failed")
 
-    broken = ConservationKernel(registry=registry, verifier=Exploding())
+    broken = ConservationKernel(allow_unguarded_roots=True, registry=registry, verifier=Exploding())
     broken.register_root(base)
     with pytest.raises(RuntimeError, match="the verifier failed"):
         submit_to_cns(broken, base, output, good)
@@ -421,8 +421,8 @@ def test_submit_to_cns_lets_a_kernel_error_that_is_not_a_ledger_refusal_propagat
 def test_an_unregistered_parent_is_a_terminal_breach_not_a_raise():
     base, registry = build_ground_truth()
     output, record = legitimate_transformation(base, 1)
-    native_kernel = ConservationKernel(registry=registry)
-    connected_kernel = ConservationKernel(registry=registry)
+    native_kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry)
+    connected_kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry)
     with pytest.raises(LedgerError, match="not in the ledger"):
         native_kernel.submit(base, output, record)
     verdict = submit_to_cns(connected_kernel, base, output, record)
@@ -639,7 +639,7 @@ def test_a_root_verdict_binds_the_content_of_the_root_not_only_its_id():
     assert first.artifact_id == second.artifact_id
     assert first.artifact_digest != second.artifact_digest
     assert root_digest(first) != root_digest(second)
-    verdict = CnsRootAdmissionGate(ConservationKernel()).check(first)
+    verdict = CnsRootAdmissionGate(ConservationKernel(allow_unguarded_roots=True)).check(first)
     assert verdict.outcome is PASS
     assert verdict.binds("root", root_digest(first))
     assert not verdict.binds("root", root_digest(second))
@@ -854,7 +854,7 @@ def test_the_transformation_gate_satisfies_the_cns_gate_protocol_at_omega():
 
 
 def test_the_root_admission_gate_satisfies_the_cns_gate_protocol_at_alpha():
-    gate = CnsRootAdmissionGate(ConservationKernel())
+    gate = CnsRootAdmissionGate(ConservationKernel(allow_unguarded_roots=True))
     assert isinstance(gate, cns_gate.Gate)
     assert gate.name == "root_admission"
     assert gate.position is ALPHA
@@ -917,7 +917,7 @@ def test_the_gates_refuse_a_candidate_of_the_wrong_kind():
     with pytest.raises(TypeError, match="TransformationCandidate"):
         CnsGate(registry).check(base)
     with pytest.raises(TypeError, match="Artifact"):
-        CnsRootAdmissionGate(ConservationKernel()).check("not an artifact")
+        CnsRootAdmissionGate(ConservationKernel(allow_unguarded_roots=True)).check("not an artifact")
     output, record = legitimate_transformation(base, 1)
     with pytest.raises(TypeError):
         TransformationCandidate(base, "not an artifact", record)
@@ -967,7 +967,7 @@ def test_the_chain_runs_through_cns_resolution():
 
 def test_an_admissible_root_maps_to_pass_at_the_alpha_end():
     base, registry = build_ground_truth()
-    kernel = ConservationKernel(registry=registry)
+    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry)
     verdict = CnsRootAdmissionGate(kernel).check(base)
     assert kernel.admit_root(base) == ()
     assert verdict.outcome is PASS
@@ -978,7 +978,7 @@ def test_an_admissible_root_maps_to_pass_at_the_alpha_end():
 
 
 def test_a_forged_root_maps_to_terminal_breach_with_the_kernels_reasons():
-    kernel = ConservationKernel()
+    kernel = ConservationKernel(allow_unguarded_roots=True)
     forged = _forged_root()
     reasons = kernel.admit_root(forged)
     assert reasons
@@ -1027,7 +1027,7 @@ ROOT_SCENARIOS = _root_scenarios()
 def test_the_root_gate_refuses_exactly_what_register_root_refuses_and_registers_nothing(
     label, root, registry, preregistered
 ):
-    kernel = ConservationKernel(registry=registry)
+    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry)
     for existing in preregistered:
         kernel.register_root(existing)
     before = kernel.ledger.snapshot()
@@ -1056,7 +1056,7 @@ def test_admit_root_alone_does_not_see_what_the_ledger_refuses_but_the_gate_does
     that ``register_root`` refuses."""
     base, registry = build_ground_truth()
     derived, _ = _derive(base, "child")
-    kernel = ConservationKernel(registry=registry)
+    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry)
     kernel.register_root(base)
     gate = CnsRootAdmissionGate(kernel)
 
@@ -1086,7 +1086,7 @@ def test_root_refusals_lists_the_propositions_reasons_first_then_the_ledgers():
         "root-forged-child", "x", forged.propositions, Actor("bot", ActorKind.SYSTEM),
         parent_artifact_ids=(forged.artifact_id,), version=2,
     )
-    kernel = ConservationKernel(registry=registry)
+    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry)
     reasons = root_refusals(kernel, child)
     assert reasons[: len(kernel.admit_root(child))] == kernel.admit_root(child)
     assert reasons[-1] == "an initial artifact cannot already have parents"
@@ -1096,7 +1096,7 @@ def test_root_refusals_lists_the_propositions_reasons_first_then_the_ledgers():
 
 
 def test_a_root_verdict_is_bound_to_the_root_it_judged():
-    kernel = ConservationKernel()
+    kernel = ConservationKernel(allow_unguarded_roots=True)
     forged, other = _forged_root(), _unsourced_fact_root()
     verdict = CnsRootAdmissionGate(kernel, subject="root-a").check(forged)
     assert verdict.bound()
@@ -1117,7 +1117,7 @@ def test_admission_reasons_given_as_a_bare_string_are_refused():
 
 def test_each_end_is_placed_where_cns_expects_it_and_resolves_fail_closed():
     base, registry = build_ground_truth()
-    kernel = ConservationKernel(registry=registry)
+    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry)
     chain = cns_gate.GateChain(
         alpha=(CnsRootAdmissionGate(kernel),),
         omega=(CnsGate(registry),),
@@ -1147,7 +1147,7 @@ def test_the_root_gate_judges_an_unguarded_kernel_as_before_by_default():
     from conservation_kernel import ConservationKernel
     from conservation_kernel.cns_connector import CnsRootAdmissionGate
     from tests.test_root_guard import root as guard_root
-    result = CnsRootAdmissionGate(ConservationKernel()).check(guard_root())
+    result = CnsRootAdmissionGate(ConservationKernel(allow_unguarded_roots=True)).check(guard_root())
     assert result.outcome.value == "pass"
 
 
@@ -1155,7 +1155,7 @@ def test_require_guard_refuses_a_kernel_with_no_guard_and_passes_one_with_a_guar
     from conservation_kernel import ConservationKernel
     from conservation_kernel.cns_connector import CnsRootAdmissionGate
     from tests.test_root_guard import root as guard_root
-    refused = CnsRootAdmissionGate(ConservationKernel(), require_guard=True).check(guard_root())
+    refused = CnsRootAdmissionGate(ConservationKernel(allow_unguarded_roots=True), require_guard=True).check(guard_root())
     assert refused.outcome.value == "terminal_breach" and "no root guard" in refused.reason
     allowed = CnsRootAdmissionGate(ConservationKernel(root_guard=lambda a: False), require_guard=True).check(guard_root())
     assert allowed.outcome.value == "pass"

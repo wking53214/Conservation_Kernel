@@ -31,7 +31,7 @@ def _human_auth(auth_id, subject, kind, frm, to, actor_id="reviewer-1"):
 # ---------------------------------------------------------------- 1. forged root
 
 def test_a_root_with_a_dangling_authorization_reference_is_refused():
-    k = ConservationKernel()
+    k = ConservationKernel(allow_unguarded_roots=True)
     p = Proposition("p-forged", "The board approved the merger.", EpistemicStatus.FACT, OriginStatus.HUMAN_ORIGINATED,
                     authority=AuthorityStatus.EXECUTED, canonical_state=CanonicalState.CANONICAL,
                     authorization_refs=("auth-does-not-exist",), source_refs=("minutes",))
@@ -41,7 +41,7 @@ def test_a_root_with_a_dangling_authorization_reference_is_refused():
 
 
 def test_a_root_fact_with_no_source_is_refused_and_one_with_evidence_admitted():
-    k = ConservationKernel()
+    k = ConservationKernel(allow_unguarded_roots=True)
     unsourced = Proposition("p-fact", "Water boils at 100C at sea level.", EpistemicStatus.FACT, OriginStatus.EXTERNAL_ORIGINATED)
     with pytest.raises(RootAdmissionError, match="must cite a source"):
         k.register_root(Artifact("root-1", "x", (unsourced,), Actor("bot", ActorKind.SYSTEM)))
@@ -55,7 +55,7 @@ def test_a_root_fact_with_no_source_is_refused_and_one_with_evidence_admitted():
 
 def test_a_root_fact_with_only_a_source_is_refused_but_an_observation_with_only_a_source_is_admitted():
     """A source says where a claim came from; evidence is what backs it. Only a FACT needs the second."""
-    k = ConservationKernel()
+    k = ConservationKernel(allow_unguarded_roots=True)
     fact = Proposition("p-fact", "Water boils at 100C at sea level.", EpistemicStatus.FACT, OriginStatus.EXTERNAL_ORIGINATED,
                        source_refs=("textbook",))
     with pytest.raises(RootAdmissionError, match="must cite evidence in the registry"):
@@ -70,7 +70,7 @@ def test_a_root_fact_with_only_a_source_is_refused_but_an_observation_with_only_
 def test_a_root_authority_claim_needs_an_authorization_about_that_proposition():
     registry = EvidenceRegistry()
     registry.add_authorization(_human_auth("auth-other", "p-other", TransitionKind.AUTHORITY_ESCALATION, "NONE", "HUMAN_AUTHORIZED"))
-    k = ConservationKernel(registry=registry)
+    k = ConservationKernel(allow_unguarded_roots=True, registry=registry)
     p = Proposition("p-claim", "Deploy to production.", EpistemicStatus.DECISION, OriginStatus.MACHINE_ORIGINATED,
                     authority=AuthorityStatus.HUMAN_AUTHORIZED, authorization_refs=("auth-other",))
     with pytest.raises(RootAdmissionError, match="no authorization for this proposition"):
@@ -113,7 +113,7 @@ def test_wildcard_evidence_does_not_verify_an_arbitrary_subject():
 # ---------------------------------------------------------------- 4. born canonical / born authoritative
 
 def _base(registry=None):
-    k = ConservationKernel(registry=registry)
+    k = ConservationKernel(allow_unguarded_roots=True, registry=registry)
     p = Proposition("p-in", "Sensor reading 42.", EpistemicStatus.INFERENCE, OriginStatus.MACHINE_ORIGINATED)
     root = Artifact("in-1", "sensor", (p,), Actor("sensor", ActorKind.SYSTEM))
     k.register_root(root)
@@ -165,7 +165,7 @@ def test_a_new_proposition_is_born_authoritative_only_with_an_authorization_abou
 # ---------------------------------------------------------------- 5. verified then erased
 
 def test_an_accepted_verification_whose_commit_fails_leaves_a_report():
-    k = ConservationKernel()
+    k = ConservationKernel(allow_unguarded_roots=True)
     p = Proposition("p-in", "Sensor reading 42.", EpistemicStatus.INFERENCE, OriginStatus.MACHINE_ORIGINATED)
     root = Artifact("in-2", "sensor", (p,), Actor("sensor", ActorKind.SYSTEM))   # deliberately NOT registered
     out, record = _derive(root, [])
