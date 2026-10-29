@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from .errors import LedgerError
+from collections.abc import Callable
+
+from .errors import LedgerError, RootAdmissionError
 from .events import TransformationRecord
 from .model import Artifact
 from .result import VerificationResult
@@ -16,7 +18,11 @@ class ConservationLedger:
     failed transition is visible rather than disappearing.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, root_guard: Callable[[Artifact], bool] | None = None) -> None:
+        """`root_guard`, if given, is asked before any initial artifact is added, and the artifact is added only
+        if it answers True. It is the caller's own permission check (the kernel imports nothing to supply one); a
+        guard that raises or answers anything but True refuses. Rebuilding a ledger from a snapshot does not ask it."""
+        self._root_guard = root_guard
         self._artifacts: dict[str, Artifact] = {}
         self._transformations: dict[str, TransformationRecord] = {}
         self._reports: list[VerificationResult] = []
@@ -24,6 +30,15 @@ class ConservationLedger:
     def add_initial(self, artifact: Artifact) -> None:
         if artifact.parent_artifact_ids:
             raise LedgerError("an initial artifact cannot already have parents")
+        if artifact.artifact_id in self._artifacts:
+            raise LedgerError(f"duplicate artifact ID {artifact.artifact_id}")
+        if self._root_guard is not None:
+            try:
+                permitted = self._root_guard(artifact) is True
+            except Exception:  # a guard that cannot answer never permits
+                permitted = False
+            if not permitted:
+                raise RootAdmissionError("root refused: the root guard did not authorize this artifact")
         self._add_artifact(artifact)
 
     def _add_artifact(self, artifact: Artifact) -> None:

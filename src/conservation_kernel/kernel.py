@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from .enums import AuthorityStatus, CanonicalState, EpistemicStatus, TransitionKind
 from .errors import LedgerError, RootAdmissionError, SnapshotAuthenticityError, SnapshotIntegrityError
@@ -31,10 +31,16 @@ class ConservationKernel:
         registry: EvidenceRegistry | None = None,
         verifier: IndependentVerifier | None = None,
         ledger: ConservationLedger | None = None,
+        root_guard: Callable[[Artifact], bool] | None = None,
     ) -> None:
+        """`root_guard` makes registering a root depend on a permission the caller holds: the ledger asks it
+        before adding any initial artifact, whether through `register_root` or `ledger.add_initial`. To guard a
+        ledger you pass in, build it with `ConservationLedger(root_guard=...)`."""
+        if root_guard is not None and ledger is not None:
+            raise ValueError("pass the root guard to the ledger you supply, not to the kernel as well")
         self.registry = registry or EvidenceRegistry()
         self.verifier = verifier or IndependentVerifier()
-        self.ledger = ledger or ConservationLedger()
+        self.ledger = ledger or ConservationLedger(root_guard=root_guard)
         self.reconstruction = ReconstructionEngine()
 
     STRONG_EPISTEMIC = frozenset({EpistemicStatus.FACT, EpistemicStatus.OBSERVATION})
