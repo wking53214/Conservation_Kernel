@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import warnings
 from collections.abc import Callable, Sequence
 
 from .enums import AuthorityStatus, CanonicalState, EpistemicStatus, TransitionKind
-from .errors import LedgerError, RootAdmissionError, SnapshotAuthenticityError, SnapshotIntegrityError
+from .errors import (LedgerError, RootAdmissionError, SnapshotAuthenticityError, SnapshotIntegrityError,
+                     UnguardedKernelError)
 from .events import TransformationRecord
 from .ledger import ConservationLedger
 from .model import Artifact, _digest, canonical_json
@@ -39,21 +39,20 @@ class ConservationKernel:
         before adding any initial artifact, whether through `register_root` or `ledger.add_initial`. To guard a
         ledger you pass in, build it with `ConservationLedger(root_guard=...)`.
 
-        A kernel with no guard registers any root it admits. That still works, but it is deprecated: a future
-        version will require a guard. Building one emits a DeprecationWarning; pass `allow_unguarded_roots=True`
-        to say the choice is deliberate and silence it."""
+        A kernel needs a guard. One with none would register any root it admits, with no approved decision
+        required, so building it raises `UnguardedKernelError` unless you pass `allow_unguarded_roots=True` to say
+        that is deliberate (a test, a tool that never registers roots). The flag is greppable on purpose: it is the
+        list of places that have not yet decided what authorizes a root."""
         if root_guard is not None and ledger is not None:
             raise ValueError("pass the root guard to the ledger you supply, not to the kernel as well")
         self.registry = registry or EvidenceRegistry()
         self.verifier = verifier or IndependentVerifier()
         self.ledger = ledger or ConservationLedger(root_guard=root_guard)
         if not self.ledger.has_root_guard and not allow_unguarded_roots:
-            warnings.warn(
-                "ConservationKernel built without a root_guard: it will register any root it admits, with no "
-                "approved decision required. This will be refused in a future version. Pass root_guard=..., or "
-                "allow_unguarded_roots=True if that is deliberate.",
-                DeprecationWarning,
-                stacklevel=2,
+            raise UnguardedKernelError(
+                "ConservationKernel built without a root_guard: it would register any root it admits, with no "
+                "approved decision required. Pass root_guard=..., or allow_unguarded_roots=True if that is "
+                "deliberate."
             )
         self.reconstruction = ReconstructionEngine()
 
@@ -155,7 +154,9 @@ class ConservationKernel:
         return body
 
     @classmethod
-    def from_snapshot(cls, snapshot: dict, *, trusted_humans=None, reverify: bool = True, signer=None) -> "ConservationKernel":
+    def from_snapshot(cls, snapshot: dict, *, trusted_humans=None, reverify: bool = True, signer=None,
+                      root_guard: Callable[[Artifact], bool] | None = None,
+                      allow_unguarded_roots: bool = False) -> "ConservationKernel":
         """A kernel continuing from `snapshot()`.
 
         The digest is checked first (corruption). Then, with `reverify`, every
@@ -180,8 +181,8 @@ class ConservationKernel:
             if problem:
                 raise SnapshotAuthenticityError(f"snapshot not authenticated: {problem}")
         registry = EvidenceRegistry.restore(body.get("registry", {}), trusted_humans=trusted_humans)
-        ledger = ConservationLedger.restore(body.get("ledger", {}))
-        kernel = cls(registry=registry, ledger=ledger)
+        ledger = ConservationLedger.restore(body.get("ledger", {}), root_guard=root_guard)
+        kernel = cls(registry=registry, ledger=ledger, allow_unguarded_roots=allow_unguarded_roots)
         if reverify:
             kernel.reverify()
         return kernel

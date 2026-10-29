@@ -30,7 +30,7 @@ class Guard:
 
 
 def test_without_a_guard_registration_is_unchanged():
-    kernel = ConservationKernel()
+    kernel = ConservationKernel(allow_unguarded_roots=True)
     kernel.register_root(root())
     assert [a.artifact_id for a in kernel.ledger.artifacts()] == ["root-1"]
 
@@ -75,7 +75,7 @@ def test_the_guard_is_not_asked_when_the_kernel_already_refuses_the_root():
 
 def test_a_snapshot_still_restores_with_a_guard_in_place():
     """Restoring rebuilds a ledger that was already registered; it does not ask for permission again."""
-    source = ConservationKernel()
+    source = ConservationKernel(allow_unguarded_roots=True)
     source.register_root(root())
     restored = ConservationLedger.restore(source.ledger.snapshot())
     assert [a.artifact_id for a in restored.artifacts()] == ["root-1"]
@@ -90,36 +90,43 @@ def test_a_guard_and_a_supplied_ledger_cannot_both_be_given_to_the_kernel():
 
 
 def test_a_kernel_says_whether_it_carries_a_guard():
-    assert ConservationKernel().has_root_guard is False
+    assert ConservationKernel(allow_unguarded_roots=True).has_root_guard is False
     assert ConservationKernel(root_guard=Guard()).has_root_guard is True
     assert ConservationKernel(ledger=ConservationLedger(root_guard=Guard())).has_root_guard is True
     assert ConservationLedger().has_root_guard is False
 
 
-# -- an unguarded kernel is deprecated, not refused ---------------------------
+# -- a kernel needs a guard, or an explicit statement that it has none -------
 
-import warnings  # noqa: E402
-
-
-def _warnings_building(**kwargs):
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        kernel = ConservationKernel(**kwargs)
-    return kernel, [w for w in caught if issubclass(w.category, DeprecationWarning)]
+from conservation_kernel.errors import UnguardedKernelError  # noqa: E402
 
 
-def test_a_kernel_built_without_a_guard_warns_but_still_registers_roots():
-    kernel, caught = _warnings_building()
-    assert len(caught) == 1 and "root_guard" in str(caught[0].message)
-    assert caught[0].filename == __file__  # points at the caller, not at the kernel
+def test_a_kernel_built_without_a_guard_is_refused_unless_that_is_said_to_be_deliberate():
+    with pytest.raises(UnguardedKernelError, match="root_guard"):
+        ConservationKernel()
+    kernel = ConservationKernel(allow_unguarded_roots=True)
     kernel.register_root(root())
     assert [a.artifact_id for a in kernel.ledger.artifacts()] == ["root-1"]
 
 
-def test_a_guarded_kernel_does_not_warn():
-    assert _warnings_building(root_guard=Guard())[1] == []
-    assert _warnings_building(ledger=ConservationLedger(root_guard=Guard()))[1] == []
+def test_a_guarded_kernel_needs_no_statement():
+    ConservationKernel(root_guard=Guard())
+    ConservationKernel(ledger=ConservationLedger(root_guard=Guard()))
 
 
-def test_saying_the_choice_is_deliberate_silences_the_warning():
-    assert _warnings_building(allow_unguarded_roots=True)[1] == []
+def test_a_ledger_you_pass_in_without_a_guard_is_refused_too():
+    with pytest.raises(UnguardedKernelError):
+        ConservationKernel(ledger=ConservationLedger())
+
+
+def test_a_restored_kernel_needs_a_guard_or_the_statement_and_the_guard_guards_later_roots():
+    source = ConservationKernel(allow_unguarded_roots=True)
+    source.register_root(root())
+    snapshot = source.snapshot()
+    with pytest.raises(UnguardedKernelError):
+        ConservationKernel.from_snapshot(snapshot)
+    guard = Guard(False)
+    restored = ConservationKernel.from_snapshot(snapshot, root_guard=guard)
+    assert [a.artifact_id for a in restored.ledger.artifacts()] == ["root-1"] and guard.asked == []
+    with pytest.raises(RootAdmissionError):
+        restored.register_root(root("root-2"))

@@ -13,6 +13,10 @@ class InvalidEvent(KernelError):
     """An evidence, authorization, or transformation event is malformed."""
 
 
+class UnguardedKernelError(KernelError):
+    """A kernel was built with no root guard and without saying that was deliberate."""
+
+
 class LedgerError(KernelError):
     """An append-only ledger operation would violate its contract."""
 

@@ -12,7 +12,7 @@ KEY = b"deployer-key-0123456789abcdef"
 
 
 def _kernel():
-    k = ConservationKernel()
+    k = ConservationKernel(allow_unguarded_roots=True)
     k.register_root(Artifact(artifact_id="root-1", content="observed", producer=Actor(actor_id="feed", kind=ActorKind.SYSTEM), propositions=()))
     return k
 
@@ -39,7 +39,7 @@ def test_signed_snapshot_loads_with_the_same_key(tmp_path):
     _kernel().save(tmp_path / "k.json", signer=s)
     body = json.loads((tmp_path / "k.json").read_text())
     assert body["signature"]["key_id"] == "k1"
-    restored = ConservationKernel.load(tmp_path / "k.json", signer=s)
+    restored = ConservationKernel.load(tmp_path / "k.json", signer=s, allow_unguarded_roots=True)
     assert restored.ledger.artifact("root-1").content == "observed"
 
 
@@ -71,7 +71,7 @@ def test_a_consistent_forgery_with_a_recomputed_digest_is_refused(tmp_path):
     body["snapshot_digest"] = _digest(canonical_json(body))
     body["signature"] = signature
     path.write_text(canonical_json(body))
-    ConservationKernel.load(path)                                    # integrity alone: accepted
+    ConservationKernel.load(path, allow_unguarded_roots=True)                                    # integrity alone: accepted
     with pytest.raises(SnapshotAuthenticityError):
         ConservationKernel.load(path, signer=s)                      # authenticity: refused
 
@@ -87,7 +87,7 @@ def test_corruption_is_still_reported_as_integrity_not_authenticity(tmp_path):
 
 def test_an_unsigned_snapshot_still_loads_without_a_key(tmp_path):
     _kernel().save(tmp_path / "k.json")
-    assert ConservationKernel.load(tmp_path / "k.json").ledger.artifact("root-1")
+    assert ConservationKernel.load(tmp_path / "k.json", allow_unguarded_roots=True).ledger.artifact("root-1")
 
 
 def test_key_id_has_no_default():
