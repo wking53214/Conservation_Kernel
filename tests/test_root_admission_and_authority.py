@@ -40,15 +40,31 @@ def test_a_root_with_a_dangling_authorization_reference_is_refused():
     assert k.ledger.artifacts() == ()
 
 
-def test_a_root_fact_with_no_source_is_refused_and_one_with_a_source_admitted():
+def test_a_root_fact_with_no_source_is_refused_and_one_with_evidence_admitted():
     k = ConservationKernel()
     unsourced = Proposition("p-fact", "Water boils at 100C at sea level.", EpistemicStatus.FACT, OriginStatus.EXTERNAL_ORIGINATED)
     with pytest.raises(RootAdmissionError, match="must cite a source"):
         k.register_root(Artifact("root-1", "x", (unsourced,), Actor("bot", ActorKind.SYSTEM)))
-    sourced = Proposition("p-fact", "Water boils at 100C at sea level.", EpistemicStatus.FACT, OriginStatus.EXTERNAL_ORIGINATED,
-                          source_refs=("textbook",))
-    k.register_root(Artifact("root-1", "x", (sourced,), Actor("bot", ActorKind.SYSTEM)))
+    k.registry.add_evidence(EvidenceRecord(evidence_id="ev-textbook", subject_id="p-fact", kind=EvidenceKind.SOURCE_OBSERVATION,
+                                           provided_by=Actor("bot", ActorKind.SYSTEM)))
+    backed = Proposition("p-fact", "Water boils at 100C at sea level.", EpistemicStatus.FACT, OriginStatus.EXTERNAL_ORIGINATED,
+                         source_refs=("textbook",), evidence_refs=("ev-textbook",))
+    k.register_root(Artifact("root-1", "x", (backed,), Actor("bot", ActorKind.SYSTEM)))
     assert [a.artifact_id for a in k.ledger.artifacts()] == ["root-1"]
+
+
+def test_a_root_fact_with_only_a_source_is_refused_but_an_observation_with_only_a_source_is_admitted():
+    """A source says where a claim came from; evidence is what backs it. Only a FACT needs the second."""
+    k = ConservationKernel()
+    fact = Proposition("p-fact", "Water boils at 100C at sea level.", EpistemicStatus.FACT, OriginStatus.EXTERNAL_ORIGINATED,
+                       source_refs=("textbook",))
+    with pytest.raises(RootAdmissionError, match="must cite evidence in the registry"):
+        k.register_root(Artifact("root-1", "x", (fact,), Actor("bot", ActorKind.SYSTEM)))
+    assert k.ledger.artifacts() == ()
+    observed = Proposition("p-obs", "The kettle boiled.", EpistemicStatus.OBSERVATION, OriginStatus.EXTERNAL_ORIGINATED,
+                           source_refs=("kitchen-log",))
+    k.register_root(Artifact("root-2", "x", (observed,), Actor("bot", ActorKind.SYSTEM)))
+    assert [a.artifact_id for a in k.ledger.artifacts()] == ["root-2"]
 
 
 def test_a_root_authority_claim_needs_an_authorization_about_that_proposition():

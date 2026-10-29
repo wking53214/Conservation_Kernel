@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from .enums import AuthorityStatus, CanonicalState, EpistemicStatus, TransitionKind
 from .errors import LedgerError, RootAdmissionError, SnapshotAuthenticityError, SnapshotIntegrityError
@@ -31,10 +31,16 @@ class ConservationKernel:
         registry: EvidenceRegistry | None = None,
         verifier: IndependentVerifier | None = None,
         ledger: ConservationLedger | None = None,
+        root_guard: Callable[[Artifact], bool] | None = None,
     ) -> None:
+        """`root_guard` makes registering a root depend on a permission the caller holds: the ledger asks it
+        before adding any initial artifact, whether through `register_root` or `ledger.add_initial`. To guard a
+        ledger you pass in, build it with `ConservationLedger(root_guard=...)`."""
+        if root_guard is not None and ledger is not None:
+            raise ValueError("pass the root guard to the ledger you supply, not to the kernel as well")
         self.registry = registry or EvidenceRegistry()
         self.verifier = verifier or IndependentVerifier()
-        self.ledger = ledger or ConservationLedger()
+        self.ledger = ledger or ConservationLedger(root_guard=root_guard)
         self.reconstruction = ReconstructionEngine()
 
     STRONG_EPISTEMIC = frozenset({EpistemicStatus.FACT, EpistemicStatus.OBSERVATION})
@@ -48,8 +54,8 @@ class ConservationKernel:
         The constitution constrains transitions, so a root is asserted. But an
         assertion that cites a registry must be backed by it: a reference that
         does not exist, an authoritative or canonical claim with no
-        authorization for that proposition, or a fact with no source, is a
-        forged origin story, and everything derived from it would inherit
+        authorization for that proposition, a fact with no evidence, or an
+        observation with no source, is a forged origin story, and everything derived from it would inherit
         verified ancestry it never had.
         """
         reasons: list[str] = []
@@ -68,6 +74,9 @@ class ConservationKernel:
                 reasons.append(f"{prop.proposition_id}: canonical state {prop.canonical_state.value} has no canonicalization for this proposition")
             if prop.epistemic_status in self.STRONG_EPISTEMIC and not (prop.source_refs or prop.evidence_refs):
                 reasons.append(f"{prop.proposition_id}: a root {prop.epistemic_status.value} must cite a source or evidence")
+            elif prop.epistemic_status is EpistemicStatus.FACT and not prop.evidence_refs:
+                reasons.append(f"{prop.proposition_id}: a root FACT must cite evidence in the registry; "
+                               "a source alone supports an OBSERVATION or an INFERENCE, not a FACT")
         return tuple(reasons)
 
     def _authorized(self, refs, subject_id: str, kind: TransitionKind, to_value: str) -> bool:

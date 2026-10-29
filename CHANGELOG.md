@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- A root `FACT` must cite evidence in the registry (`evidence_refs`). A source
+  alone no longer admits a FACT: it supports an `OBSERVATION` or an
+  `INFERENCE`. An `OBSERVATION` root still needs only a source or evidence.
+  Breaking for a caller that registered FACT roots on a source alone.
+- `ConservationKernel(root_guard=...)` and `ConservationLedger(root_guard=...)`:
+  an optional permission check, handed in by the caller, that the ledger asks
+  before adding any initial artifact, through `register_root` or through
+  `ledger.add_initial` directly. Only an answer of `True` permits; a raise or
+  anything else refuses. It is asked last, after the kernel's own admission
+  and the duplicate-id check, so a one-shot permission is not spent on a root
+  that would be refused anyway. Restoring a snapshot does not ask it. The
+  kernel imports nothing to build a guard; a composition layer supplies one.
+  Without a guard nothing changes: the guard narrows who can register a root
+  only for a kernel that was built with one.
+
 - `Proposition.conditions`: an optional list of the circumstances a claim
   holds under. A transformation may add a condition. Dropping or rewording
   one is `UNAUTHORIZED_SCOPE_WIDENING`, and a new proposition that leaves out
