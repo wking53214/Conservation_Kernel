@@ -104,6 +104,11 @@ class ConservationKernel:
             missing = self.registry.missing_refs(prop.evidence_refs)
             if missing:
                 reasons.append(f"{prop.proposition_id}: evidence_refs not in registry: {list(missing)}")
+            inactive = self.registry.inactive_refs(prop.evidence_refs)
+            if inactive and (prop.epistemic_status in self.STRONG_EPISTEMIC or prop.authority is not AuthorityStatus.NONE
+                             or prop.canonical_state is CanonicalState.CANONICAL):
+                # The verifier's own rule (INACTIVE_EVIDENCE), applied at the other door into the ledger.
+                reasons.append(f"{prop.proposition_id}: strong/canonical root proposition cites inactive evidence: {list(inactive)}")
             dangling = tuple(ref for ref in prop.authorization_refs if self.registry.authorization(ref) is None)
             if dangling:
                 reasons.append(f"{prop.proposition_id}: authorization_refs not in registry: {list(dangling)}")
