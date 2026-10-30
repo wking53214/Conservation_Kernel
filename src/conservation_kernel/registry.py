@@ -123,6 +123,10 @@ class EvidenceRegistry:
     def add_revocation(self, event: RevocationEvent, *, recorded_at: str) -> None:
         """Record `event` as of `recorded_at` (ISO 8601 with offset), the recording clock's time.
 
+        `recorded_at` is trusted as given, like everything else written to this registry: whoever can write it is
+        the deployer. A recording time set earlier than the truth would let a revocation reach back over decisions
+        already made. Record through `ConservationKernel.revoke`, which uses the kernel's own clock.
+
         The revoker must be a human this registry trusts, where it names them. The authorization need not be here
         yet: a revocation that arrives first still applies when it does. A revocation whose `effective_at` is before
         `recorded_at` is refused, because applying it would re-judge decisions already made under the authorization
@@ -285,6 +289,24 @@ class RegistryAt:
     def __init__(self, registry: EvidenceRegistry, as_of: str | None) -> None:
         self.registry = registry
         self.as_of = as_of
+
+    # Read-only settings and records, so a verifier written against the registry can still read them.
+    @property
+    def trusted_humans(self):
+        return self.registry.trusted_humans
+
+    @property
+    def require_bounded(self) -> bool:
+        return self.registry.require_bounded
+
+    def snapshot(self) -> dict:
+        return self.registry.snapshot()
+
+    def revocations_of(self, authorization_id: str):
+        return self.registry.revocations_of(authorization_id)
+
+    def delegation(self, delegation_id: str):
+        return self.registry.delegation(delegation_id)
 
     def at(self, as_of: str | None) -> "RegistryAt":
         return RegistryAt(self.registry, as_of)

@@ -34,6 +34,15 @@ AUTHORITY_ORDER = {
 STRONG_EPISTEMIC = frozenset({EpistemicStatus.FACT, EpistemicStatus.OBSERVATION})
 
 
+def _reaches(event: Any, new: Proposition, subject_ids: set[str]) -> bool:
+    """Whether an authorization can back a new proposition. One about the proposition or a parent can, except that a
+    delegated authorization reaches only the very subject it names: a delegation lists its subjects one by one, and
+    the parent rule would otherwise let one delegated authorization back any number of new propositions."""
+    if event.subject_id not in subject_ids:
+        return False
+    return getattr(event, "under_delegation", None) is None or event.subject_id == new.proposition_id
+
+
 def _plain(value: Any) -> Any:
     if hasattr(value, "value"):
         return value.value
@@ -492,7 +501,7 @@ class IndependentVerifier:
             # parent, and it must grant this authority.
             if not any(
                 (event := registry.authorization(ref)) is not None
-                and event.subject_id in subject_ids
+                and _reaches(event, new, subject_ids)
                 and event.transition_kind is TransitionKind.AUTHORITY_ESCALATION
                 and event.to_value == new.authority.value
                 for ref in auth_refs
@@ -501,7 +510,7 @@ class IndependentVerifier:
         if new.canonical_state in {CanonicalState.ACCEPTED, CanonicalState.CANONICAL, CanonicalState.SUPERSEDED, CanonicalState.REVOKED, CanonicalState.DELETED}:
             if not any(
                 (event := registry.authorization(ref)) is not None
-                and event.subject_id in subject_ids
+                and _reaches(event, new, subject_ids)
                 and event.transition_kind is TransitionKind.CANONICALIZATION
                 and event.to_value == new.canonical_state.value
                 for ref in auth_refs
@@ -520,7 +529,7 @@ class IndependentVerifier:
         }
         if inherited - set(new.conditions) and not any(
             (event := registry.authorization(ref)) is not None
-            and event.subject_id in subject_ids
+            and _reaches(event, new, subject_ids)
             and event.transition_kind is TransitionKind.SCOPE_WIDENING
             and event.to_value == list(new.conditions)
             for ref in auth_refs

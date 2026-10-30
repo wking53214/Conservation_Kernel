@@ -23,6 +23,20 @@
   link cuts off everything beneath it.
 - `EvidenceRegistry(require_bounded=True)` (default off) refuses an
   authorization or delegation with no end, live and on restore.
+- A delegated authorization backs a new proposition only if it names that very
+  proposition, not merely a parent of it.
+- History with no time (written before times existed) is judged as of its first
+  reload and given that time once. A recorded time that is unreadable or later
+  than the kernel's clock is refused on reload. The kernel refuses a clock that
+  does not return an ISO 8601 time with an offset.
+- `CnsGate(..., clock=...)` and `verify_to_cns(..., clock=...)`: judge as of a
+  clock, to agree with the kernel on time-limited authorizations. Without one
+  they judge exactly as the verifier does on the registry given.
+- Compatibility: a registry subclass that overrides `has_authorization` must
+  accept `as_of`; a custom verifier now receives a `RegistryAt` view (it keeps
+  the registry's lookups and read-only settings). A `VerificationResult` from
+  the kernel now carries its time, so two kernels with different clocks give
+  unequal results for the same submission.
 - A root `FACT` must cite evidence in the registry (`evidence_refs`). A source
   alone no longer admits a FACT: it supports an `OBSERVATION` or an
   `INFERENCE`. An `OBSERVATION` root still needs only a source or evidence.

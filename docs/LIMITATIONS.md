@@ -24,6 +24,14 @@ records it, never earlier, so it cannot unmake a decision already accepted.
 A delegated authorization is judged when it is used; when it was issued is
 the issuer's own claim and is not relied on.
 
+Two paths sit outside these guarantees because they are the deployer's own.
+`EvidenceRegistry.add_revocation(recorded_at=...)` trusts the time it is given;
+a time set earlier than the truth lets a revocation reach back over accepted
+decisions, so record through `ConservationKernel.revoke`. And a root or
+transformation written straight to the ledger (not through the kernel) carries
+no time until the kernel first re-verifies it, so a revocation recorded before
+that reload reaches it.
+
 The verifier is conservative. It rejects source-reference changes unless a
 registered source observation supports them, and it does not infer that a
 human-authored container makes embedded machine material human-originated.

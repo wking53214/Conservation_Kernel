@@ -96,11 +96,14 @@ def test_a_snapshot_written_before_stamps_existed_still_restores(tmp_path):
     body = k.snapshot()
     body.pop("snapshot_digest")
     body["ledger"].pop("root_admitted_at", None)
+    body["ledger"].pop("transformation_verified_at", None)
     for report in body["ledger"]["reports"]:
         report.pop("verified_at", None)
     body["snapshot_digest"] = _digest(canonical_json(body))
     path = tmp_path / "old.json"
     path.write_text(json.dumps(body))
-    restored = ConservationKernel.load(path, allow_unguarded_roots=True)
-    assert restored.ledger.verified_at("t-1") is None and restored.ledger.admitted_at("in-1") is None
+    reloaded_at = "2026-10-03T09:00:00+00:00"
+    restored = ConservationKernel.load(path, allow_unguarded_roots=True, clock=_Clock(reloaded_at))
+    # Judged as of the reload, and given that time once, so a revocation recorded later cannot reach back over it.
+    assert restored.ledger.verified_at("t-1") == reloaded_at and restored.ledger.admitted_at("in-1") == reloaded_at
     assert restored.reconstruct("out-1").transformation_ids_in_order == ("t-1",)
