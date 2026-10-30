@@ -5,8 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 
 from .enums import AuthorityStatus, CanonicalState, EpistemicStatus, TransitionKind
-from .errors import (LedgerError, RootAdmissionError, SnapshotAuthenticityError, SnapshotIntegrityError,
-                     UnguardedKernelError)
+from .errors import LedgerError, SnapshotAuthenticityError, SnapshotIntegrityError, UnguardedKernelError
 from .events import EvidenceRecord, RevocationEvent, TransformationRecord, instant
 from .ledger import ConservationLedger
 from .model import Artifact, _digest, canonical_json, utc_now
@@ -36,6 +35,8 @@ class ConservationKernel:
         allow_unguarded_roots: bool = False,
         clock: Callable[[], str] | None = None,
         evidence_guard: Callable[[EvidenceRecord], bool] | None = None,
+        require_content_bound: bool = False,
+        allow_unguarded_evidence: bool = False,
     ) -> None:
         """`clock` returns the time the kernel decides at (ISO 8601 with offset). Every decision and root admission
         is stamped with it and judged as of it. It defaults to this machine's UTC clock; a deployment should hand in
@@ -51,14 +52,26 @@ class ConservationKernel:
         list of places that have not yet decided what authorizes a root.
 
         `evidence_guard` makes adding evidence depend on a permission the caller holds: the registry asks it before
-        adding any evidence record, whether through `kernel.registry.add_evidence` or any other route to it. It is
-        optional, and with none any caller may add evidence, as before. To guard a registry you pass in, build it with
-        `EvidenceRegistry(evidence_guard=...)`."""
+        adding any evidence record, whether through `kernel.registry.add_evidence` or any other route to it, and
+        about every record a snapshot restores. A kernel needs one too: with none, any caller could add evidence that
+        declares itself independent verification and the verifier would count it, so building it raises
+        `UnguardedKernelError` unless you pass `allow_unguarded_evidence=True` to say that is deliberate. As with
+        `allow_unguarded_roots`, the flag is greppable on purpose. To guard a registry you pass in, build it with
+        `EvidenceRegistry(evidence_guard=...)`.
+
+        `require_content_bound` makes the registry refuse an authorization that does not carry the digest of the
+        proposition it approves (`AuthorizationEvent.subject_digest`), so no authorization can be reused for other
+        words than the ones approved. Off by default: an authorization with a digest is always held to it, and one
+        without is judged as before. To set it on a registry you pass in, build it with
+        `EvidenceRegistry(require_content_bound=True)`."""
         if root_guard is not None and ledger is not None:
             raise ValueError("pass the root guard to the ledger you supply, not to the kernel as well")
         if evidence_guard is not None and registry is not None:
             raise ValueError("pass the evidence guard to the registry you supply, not to the kernel as well")
-        self.registry = registry or EvidenceRegistry(evidence_guard=evidence_guard)
+        if require_content_bound and registry is not None:
+            raise ValueError("pass require_content_bound to the registry you supply, not to the kernel as well")
+        self.registry = registry or EvidenceRegistry(evidence_guard=evidence_guard,
+                                                     require_content_bound=require_content_bound)
         self.clock = clock or utc_now
         self.verifier = verifier or IndependentVerifier()
         self.ledger = ledger or ConservationLedger(root_guard=root_guard)
@@ -68,6 +81,13 @@ class ConservationKernel:
                 "approved decision required. Pass root_guard=..., or allow_unguarded_roots=True if that is "
                 "deliberate."
             )
+        if not self.registry.has_evidence_guard and not allow_unguarded_evidence:
+            raise UnguardedKernelError(
+                "ConservationKernel built without an evidence_guard: any caller could add evidence that declares "
+                "itself independent verification, and the verifier would count it. Pass evidence_guard=..., or "
+                "allow_unguarded_evidence=True if that is deliberate."
+            )
+        self.ledger._bind(self.registry.issuer, self.admit_root)
         self.reconstruction = ReconstructionEngine()
 
     @property
@@ -75,6 +95,11 @@ class ConservationKernel:
         """Whether this kernel registers a root only with a guard's permission. A caller deciding whether to
         trust this kernel with an approval can read this; it cannot be turned off after construction."""
         return self.ledger.has_root_guard
+
+    @property
+    def require_content_bound(self) -> bool:
+        """Whether this kernel's registry refuses an authorization that is not bound to the content it approves."""
+        return self.registry.require_content_bound
 
     @property
     def has_evidence_guard(self) -> bool:
@@ -109,11 +134,11 @@ class ConservationKernel:
                 reasons.append(f"{prop.proposition_id}: authorization_refs not in registry: {list(dangling)}")
             if prop.authority in self.AUTHORITATIVE and not self._authorized(
                     prop.authorization_refs, prop.proposition_id, TransitionKind.AUTHORITY_ESCALATION, prop.authority.value,
-                    registry=registry):
+                    subject_digest=prop.canonical_digest, registry=registry):
                 reasons.append(f"{prop.proposition_id}: authority {prop.authority.value} has no authorization for this proposition")
             if prop.canonical_state in self.CANONICAL_STATES and not self._authorized(
                     prop.authorization_refs, prop.proposition_id, TransitionKind.CANONICALIZATION, prop.canonical_state.value,
-                    registry=registry):
+                    subject_digest=prop.canonical_digest, registry=registry):
                 reasons.append(f"{prop.proposition_id}: canonical state {prop.canonical_state.value} has no canonicalization for this proposition")
             if prop.epistemic_status in self.STRONG_EPISTEMIC and not (prop.source_refs or prop.evidence_refs):
                 reasons.append(f"{prop.proposition_id}: a root {prop.epistemic_status.value} must cite a source or evidence")
@@ -128,13 +153,15 @@ class ConservationKernel:
         instant(moment, "clock")
         return moment
 
-    def _authorized(self, refs, subject_id: str, kind: TransitionKind, to_value: str, *, registry=None) -> bool:
+    def _authorized(self, refs, subject_id: str, kind: TransitionKind, to_value: str, *,
+                    subject_digest: str | None = None, registry=None) -> bool:
         registry = registry if registry is not None else self.registry.at(self._now())
         for ref in refs:
             event = registry.authorization(ref)
             if event is None:
                 continue
-            if event.subject_id == subject_id and event.transition_kind is kind and event.to_value == to_value:
+            if (event.subject_id == subject_id and event.transition_kind is kind and event.to_value == to_value
+                    and registry.binds(event, subject_digest)):
                 return True
         return False
 
@@ -143,11 +170,8 @@ class ConservationKernel:
         self.registry.add_revocation(event, recorded_at=self._now())
 
     def register_root(self, artifact: Artifact) -> None:
-        as_of = self._now()
-        reasons = self.admit_root(artifact, as_of=as_of)
-        if reasons:
-            raise RootAdmissionError("root refused: " + "; ".join(reasons))
-        self.ledger.add_initial(artifact, admitted_at=as_of)
+        # The ledger asks `admit_root` itself, as of the time given here, so this door and `ledger.add_initial` agree.
+        self.ledger.add_initial(artifact, admitted_at=self._now())
 
     def submit(
         self,
@@ -195,7 +219,9 @@ class ConservationKernel:
                       allow_unguarded_roots: bool = False,
                       clock: Callable[[], str] | None = None,
                       require_bounded: bool = False,
-                      evidence_guard: Callable[[EvidenceRecord], bool] | None = None) -> "ConservationKernel":
+                      evidence_guard: Callable[[EvidenceRecord], bool] | None = None,
+                      require_content_bound: bool = False,
+                      allow_unguarded_evidence: bool = False) -> "ConservationKernel":
         """A kernel continuing from `snapshot()`.
 
         The digest is checked first (corruption). Then, with `reverify`, every
@@ -220,9 +246,11 @@ class ConservationKernel:
             if problem:
                 raise SnapshotAuthenticityError(f"snapshot not authenticated: {problem}")
         registry = EvidenceRegistry.restore(body.get("registry", {}), trusted_humans=trusted_humans,
-                                            require_bounded=require_bounded, evidence_guard=evidence_guard)
+                                            require_bounded=require_bounded, evidence_guard=evidence_guard,
+                                            require_content_bound=require_content_bound)
         ledger = ConservationLedger.restore(body.get("ledger", {}), root_guard=root_guard)
-        kernel = cls(registry=registry, ledger=ledger, allow_unguarded_roots=allow_unguarded_roots, clock=clock)
+        kernel = cls(registry=registry, ledger=ledger, allow_unguarded_roots=allow_unguarded_roots, clock=clock,
+                     allow_unguarded_evidence=allow_unguarded_evidence)
         if reverify:
             kernel.reverify()
         return kernel

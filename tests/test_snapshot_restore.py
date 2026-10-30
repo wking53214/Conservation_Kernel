@@ -20,7 +20,7 @@ from conservation_kernel.errors import InvalidEvent, SnapshotIntegrityError
 
 
 def _lineage(kernel=None):
-    k = kernel or ConservationKernel(allow_unguarded_roots=True)
+    k = kernel or ConservationKernel(allow_unguarded_roots=True, allow_unguarded_evidence=True)
     p = Proposition("p-in", "Sensor reading 42.", EpistemicStatus.INFERENCE, OriginStatus.MACHINE_ORIGINATED)
     root = Artifact("in-1", "sensor", (p,), Actor("sensor", ActorKind.SYSTEM))
     k.register_root(root)
@@ -43,7 +43,7 @@ def _lineage(kernel=None):
 def test_a_snapshot_round_trips_and_the_lineage_reconstructs_after_restart(tmp_path):
     k = _lineage()
     k.save(tmp_path / "kernel.json")
-    restored = ConservationKernel.load(tmp_path / "kernel.json", allow_unguarded_roots=True)            # "restart"
+    restored = ConservationKernel.load(tmp_path / "kernel.json", allow_unguarded_roots=True, allow_unguarded_evidence=True)            # "restart"
     rec = restored.reconstruct("out-1")
     assert rec.root_artifact_ids == ("in-1",) and rec.transformation_ids_in_order == ("t-1",)
     assert [r.transformation_id for r in restored.ledger.reports()] == ["t-1"]
@@ -58,7 +58,7 @@ def test_a_snapshot_whose_bytes_were_altered_is_refused(tmp_path):
     body["ledger"]["artifacts"][0]["content"] = "rewritten"
     path.write_text(json.dumps(body))
     with pytest.raises(SnapshotIntegrityError, match="digest does not recompute"):
-        ConservationKernel.load(path)
+        ConservationKernel.load(path, allow_unguarded_evidence=True)
 
 
 def test_a_hand_written_lineage_that_would_not_verify_is_refused_on_restore():
@@ -74,7 +74,7 @@ def test_a_hand_written_lineage_that_would_not_verify_is_refused_on_restore():
     out["content_digest"] = None
     out["artifact_digest"] = None            # let digests recompute
     with pytest.raises(SnapshotIntegrityError):
-        ConservationKernel.from_snapshot(snap, allow_unguarded_roots=True)
+        ConservationKernel.from_snapshot(snap, allow_unguarded_roots=True, allow_unguarded_evidence=True)
 
 
 def test_a_forged_root_in_a_snapshot_is_refused_on_restore():
@@ -87,10 +87,10 @@ def test_a_forged_root_in_a_snapshot_is_refused_on_restore():
                      authority=AuthorityStatus.EXECUTED, authorization_refs=("auth-does-not-exist",)),),
         Actor("bot", ActorKind.HUMAN)).to_dict())
     with pytest.raises(SnapshotIntegrityError, match="root root-forged would not be admitted"):
-        ConservationKernel.from_snapshot(snap, allow_unguarded_roots=True)
+        ConservationKernel.from_snapshot(snap, allow_unguarded_roots=True, allow_unguarded_evidence=True)
     # Without re-verification the forged root is loaded: the flag exists for
     # offline forensics, and its name says what it skips.
-    loaded = ConservationKernel.from_snapshot(snap, reverify=False, allow_unguarded_roots=True)
+    loaded = ConservationKernel.from_snapshot(snap, reverify=False, allow_unguarded_roots=True, allow_unguarded_evidence=True)
     assert "root-forged" in [a.artifact_id for a in loaded.ledger.artifacts()]
 
 
@@ -99,15 +99,15 @@ def test_trusted_humans_are_enforced_on_restore_too():
     registry.add_authorization(AuthorizationEvent(
         authorization_id="auth-1", authorized_by=Actor("autonomous-agent", ActorKind.HUMAN), subject_id="p",
         transition_kind=TransitionKind.EPISTEMIC_PROMOTION, from_value="UNKNOWN", to_value="FACT", reason="self"))
-    snap = ConservationKernel(allow_unguarded_roots=True, registry=registry).snapshot()
+    snap = ConservationKernel(allow_unguarded_roots=True, registry=registry, allow_unguarded_evidence=True).snapshot()
     with pytest.raises(InvalidEvent, match="does not recognise"):
-        ConservationKernel.from_snapshot(snap, trusted_humans={"reviewer-1"}, allow_unguarded_roots=True)
-    assert ConservationKernel.from_snapshot(snap, allow_unguarded_roots=True).registry.authorization("auth-1") is not None
+        ConservationKernel.from_snapshot(snap, trusted_humans={"reviewer-1"}, allow_unguarded_roots=True, allow_unguarded_evidence=True)
+    assert ConservationKernel.from_snapshot(snap, allow_unguarded_roots=True, allow_unguarded_evidence=True).registry.authorization("auth-1") is not None
 
 
 def test_work_continues_after_restart_on_the_restored_ledger():
     k = _lineage()
-    restored = ConservationKernel.from_snapshot(k.snapshot(), allow_unguarded_roots=True)
+    restored = ConservationKernel.from_snapshot(k.snapshot(), allow_unguarded_roots=True, allow_unguarded_evidence=True)
     out = restored.ledger.artifact("out-1")
     p_in, p_out = out.propositions
     r = Proposition("p-next", "Escalate.", EpistemicStatus.DECISION, OriginStatus.MACHINE_ORIGINATED,

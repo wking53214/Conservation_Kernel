@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from collections.abc import Callable
 
 from .errors import InvalidEvent
@@ -22,13 +23,15 @@ class EvidenceRegistry:
 
     def __init__(self, *, trusted_humans: set[str] | frozenset[str] | None = None,
                  require_bounded: bool = False,
-                 evidence_guard: Callable[[EvidenceRecord], bool] | None = None) -> None:
+                 evidence_guard: Callable[[EvidenceRecord], bool] | None = None,
+                 require_content_bound: bool = False) -> None:
         """`evidence_guard`, if given, is asked before any evidence record is added, and the record is added only if it
         answers exactly True. It is the caller's own permission check (the kernel imports nothing to supply one); a
         guard that raises or answers anything else refuses, and a refused record leaves the registry as it was. It is
         asked after the registry has refused what it refuses itself (a duplicate id), so a one-use permission is not
-        spent on a record that could never go in. Rebuilding a registry from a snapshot does not ask it. With none
-        (the default) any caller may add evidence, as before."""
+        spent on a record that could never go in. Rebuilding a registry from a snapshot asks it about every restored
+        record too, so evidence planted in a file cannot load past a guard. With none (the default) any caller may add
+        evidence, as before."""
         # ActorKind.HUMAN is a self-declaration on a caller-supplied dataclass:
         # a machine that constructs Actor("agent", kind=HUMAN) mints valid
         # human authorizations (measured 2026-09-08). The kernel cannot know
@@ -40,7 +43,13 @@ class EvidenceRegistry:
         # Off by default, so nothing changes until a deployer asks: with it on, an authorization must say when it
         # stops holding (`valid_until`). An open-ended one is refused, live and on restore.
         self.require_bounded = require_bounded
+        # Off by default. With it on, an authorization must carry the digest of the proposition it is about
+        # (`subject_digest`); one that does not is refused, live and on restore, and never counts.
+        self.require_content_bound = require_content_bound
         self._evidence_guard = evidence_guard
+        # Names this registry in the proof on a verification result, so a verdict reached against some other registry
+        # cannot be passed off as this one's. Random per instance and never written to a snapshot.
+        self._issuer = secrets.token_hex(16)
         self._evidence: dict[str, EvidenceRecord] = {}
         self._authorizations: dict[str, AuthorizationEvent] = {}
         self._delegations: dict[str, DelegationEvent] = {}
@@ -52,6 +61,11 @@ class EvidenceRegistry:
     def has_evidence_guard(self) -> bool:
         """Whether adding evidence depends on a guard. Says nothing about what the guard will answer."""
         return self._evidence_guard is not None
+
+    @property
+    def issuer(self) -> str:
+        """The name this registry puts on the verdicts reached against it (see `VerificationResult.proof`)."""
+        return self._issuer
 
     def add_evidence(self, record: EvidenceRecord) -> None:
         if record.evidence_id in self._evidence:
@@ -85,6 +99,11 @@ class EvidenceRegistry:
             raise InvalidEvent(
                 f"authorization {event.authorization_id} has no end (valid_until), and this registry accepts only "
                 "authorizations that stop holding at a stated time"
+            )
+        if self.require_content_bound and event.subject_digest is None:
+            raise InvalidEvent(
+                f"authorization {event.authorization_id} has no subject_digest, and this registry accepts only "
+                "authorizations bound to the content they approve"
             )
         if event.authorization_id in self._authorizations or event.authorization_id in self._delegations:
             raise InvalidEvent(f"duplicate authorization ID {event.authorization_id}")
@@ -251,6 +270,14 @@ class EvidenceRegistry:
     def missing_refs(self, refs: tuple[str, ...] | list[str]) -> tuple[str, ...]:
         return tuple(ref for ref in refs if ref not in self._evidence)
 
+    def binds(self, event: AuthorizationEvent, subject_digest: str | None) -> bool:
+        """Whether `event` is about this content. One with a `subject_digest` is about only the proposition with that
+        digest, so a caller that does not say what it is authorizing (`subject_digest` None) cannot use it. One without
+        is about the subject whatever its words, unless this registry requires every authorization to be bound."""
+        if event.subject_digest is None:
+            return not self.require_content_bound
+        return subject_digest is not None and event.subject_digest == subject_digest
+
     def has_authorization(
         self,
         refs: tuple[str, ...] | list[str],
@@ -260,12 +287,13 @@ class EvidenceRegistry:
         from_value,
         to_value,
         as_of: str | None = None,
+        subject_digest: str | None = None,
     ) -> bool:
         for ref in refs:
             event = self._authorizations.get(ref)
             if event is None or not self.in_force(event, as_of):
                 continue
-            if event.subject_id != subject_id:
+            if event.subject_id != subject_id or not self.binds(event, subject_digest):
                 continue
             if event.transition_kind is not transition_kind:
                 continue
@@ -287,12 +315,15 @@ class EvidenceRegistry:
 
     @classmethod
     def restore(cls, snapshot: dict, *, trusted_humans=None, require_bounded: bool = False,
-                evidence_guard: Callable[[EvidenceRecord], bool] | None = None) -> "EvidenceRegistry":
+                evidence_guard: Callable[[EvidenceRecord], bool] | None = None,
+                require_content_bound: bool = False) -> "EvidenceRegistry":
         """A registry rebuilt from `snapshot()`. Authorizations go through
         add_authorization, so a trusted-humans binding and `require_bounded`
-        are enforced on restore as they were live. The evidence in the snapshot is not put to `evidence_guard`
-        (it was guarded, or not, when first added); the guard governs evidence added after."""
-        registry = cls(trusted_humans=trusted_humans, require_bounded=require_bounded)
+        are enforced on restore as they were live. So is `evidence_guard`: it is in place before the first record is
+        added, and a record it does not authorize refuses the whole restore, so a file cannot plant evidence the
+        guard would have refused."""
+        registry = cls(trusted_humans=trusted_humans, require_bounded=require_bounded,
+                       evidence_guard=evidence_guard, require_content_bound=require_content_bound)
         for item in snapshot.get("evidence", []):
             registry.add_evidence(EvidenceRecord.from_dict(item))
         for item in snapshot.get("delegations", []):             # before the authorizations that cite them
@@ -301,7 +332,6 @@ class EvidenceRegistry:
             registry.add_authorization(AuthorizationEvent.from_dict(item))
         for item in snapshot.get("revocations", []):
             registry.add_revocation(RevocationEvent.from_dict(item["revocation"]), recorded_at=item["recorded_at"])
-        registry._evidence_guard = evidence_guard
         return registry
 
 
@@ -323,6 +353,17 @@ class RegistryAt:
     @property
     def require_bounded(self) -> bool:
         return self.registry.require_bounded
+
+    @property
+    def require_content_bound(self) -> bool:
+        return self.registry.require_content_bound
+
+    @property
+    def issuer(self) -> str:
+        return self.registry.issuer
+
+    def binds(self, event: AuthorizationEvent, subject_digest: str | None) -> bool:
+        return self.registry.binds(event, subject_digest)
 
     def snapshot(self) -> dict:
         return self.registry.snapshot()

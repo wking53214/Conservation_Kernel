@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import hmac
+import secrets
+from dataclasses import dataclass, field, replace
+from hashlib import sha256
 from typing import Any
 
 from .enums import Dimension, VerificationStatus
+from .model import _digest, canonical_json
+
+# Held by this process only and never written out. It is what makes a result the verifier produced different from one
+# a caller typed: only code in this package asks for a proof, so a hand-built result, or a real one edited afterwards,
+# has none that checks. It guards against misuse of the public API, not against code that reads private module state.
+_PROOF_KEY = secrets.token_bytes(32)
 
 
 @dataclass(frozen=True)
@@ -64,6 +73,10 @@ class VerificationResult:
     #: was called without a time. Authorizations that expire or can be revoked are judged as of this moment,
     #: and a restore re-verifies as of it, so history is not re-judged against a later day.
     verified_at: str | None = None
+    #: (issuer, mac): set by `IndependentVerifier.verify` and by nothing else, so the ledger can tell a result the
+    #: verifier produced from one written by hand. It covers every field above, the record and the output verified,
+    #: and the registry (`issuer`) the verdict was reached against. Never serialized and never compared.
+    proof: tuple[str, str] | None = field(default=None, repr=False, compare=False)
 
     @property
     def accepted(self) -> bool:
@@ -96,3 +109,25 @@ class VerificationResult:
             checked_dimensions=tuple(Dimension(item) for item in data.get("checked_dimensions", [])),
             verified_at=data.get("verified_at"),
         )
+
+
+def _mac(result: "VerificationResult", record: Any, output: Any, issuer: str) -> str:
+    body = canonical_json({"result": result.to_dict(), "record": _digest(record.to_dict()),
+                           "output": output.artifact_digest, "issuer": issuer})
+    return hmac.new(_PROOF_KEY, body.encode("utf-8"), sha256).hexdigest()
+
+
+def _issue_proof(result: VerificationResult, record: Any, output: Any, issuer: str | None) -> VerificationResult:
+    """`result` with a proof that the verifier produced it, for this record and output, against registry `issuer`."""
+    if issuer is None:
+        return result
+    return replace(result, proof=(issuer, _mac(result, record, output, issuer)))
+
+
+def _proof_issuer(result: VerificationResult, record: Any, output: Any) -> str | None:
+    """The registry this result was verified against, if its proof checks for exactly this record and output; None
+    if it carries no proof or the proof does not match (the result, record or output was written or changed by hand)."""
+    if result.proof is None:
+        return None
+    issuer, mac = result.proof
+    return issuer if hmac.compare_digest(mac, _mac(result, record, output, issuer)) else None

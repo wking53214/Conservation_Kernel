@@ -88,11 +88,11 @@ Measured 2026-10-30 at main `7233ab6`.
 
 | Door | Protection today |
 |---|---|
-| `register_root` and `ledger.add_initial` | The root guard. A kernel refuses to be built without one unless `allow_unguarded_roots=True` says so. The guard answers only `True` to permit. |
-| `ledger.commit` | A bookkeeping step after a result says accepted. It is not a permission check: a result is a plain object the caller can write. |
+| `register_root` and `ledger.add_initial` | The root guard, and on a ledger a kernel owns the kernel's `admit_root` (every reference a root cites must exist and back what it claims), asked first. A kernel refuses to be built without a guard unless `allow_unguarded_roots=True` says so. The guard answers only `True` to permit. |
+| `ledger.commit` | Takes only a result the verifier produced for this record and output (`VerificationResult.proof`); a result written by hand, or edited after verification, is refused. A ledger a kernel owns also refuses one reached against any registry but that kernel's. |
 | `ConservationKernel.submit` | The verifier decides. Any caller may submit. |
-| `registry.add_authorization`, `add_delegation`, `revoke` | Only from a human in `trusted_humans`, when the deployer sets that. With it unset, any actor id is accepted. |
-| `registry.add_evidence` | Optional. With `evidence_guard` on the registry (or on the kernel that builds it), a record is added only if the guard answers exactly `True`; a raise or any other answer refuses and leaves the registry unchanged. A duplicate id is refused before the guard is asked, and evidence restored from a snapshot is not put to it. With no guard, any caller can add active evidence that declares itself independent, as before. |
+| `registry.add_authorization`, `add_delegation`, `revoke` | Only from a human in `trusted_humans`, when the deployer sets that. With it unset, any actor id is accepted. An authorization that carries a `subject_digest` counts only for the proposition with that digest, and with `require_content_bound` one without a digest is refused. |
+| `registry.add_evidence` | Optional. With `evidence_guard` on the registry (or on the kernel that builds it), a record is added only if the guard answers exactly `True`; a raise or any other answer refuses and leaves the registry unchanged. A duplicate id is refused before the guard is asked, and evidence restored from a snapshot is put to it too, so a file cannot plant what the guard would refuse. A kernel refuses to be built without an evidence guard unless `allow_unguarded_evidence=True` says so (the same rule as `allow_unguarded_roots`), because with no guard any caller can add active evidence that declares itself independent. A bare `EvidenceRegistry` with no guard still takes any caller's evidence. |
 | `ledger.record_rejection`, `record_times` | None. A report can be added by any caller holding the ledger; times are set once and never replaced. |
 | `from_snapshot` and `load` | Digest check and re-verification; a signature only if the loader passes a signer. |
 
