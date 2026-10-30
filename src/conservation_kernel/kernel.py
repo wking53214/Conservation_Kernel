@@ -7,7 +7,7 @@ from collections.abc import Callable, Sequence
 from .enums import AuthorityStatus, CanonicalState, EpistemicStatus, TransitionKind
 from .errors import (LedgerError, RootAdmissionError, SnapshotAuthenticityError, SnapshotIntegrityError,
                      UnguardedKernelError)
-from .events import RevocationEvent, TransformationRecord, instant
+from .events import EvidenceRecord, RevocationEvent, TransformationRecord, instant
 from .ledger import ConservationLedger
 from .model import Artifact, _digest, canonical_json, utc_now
 from .reconstruction import Reconstruction, ReconstructionEngine
@@ -35,6 +35,7 @@ class ConservationKernel:
         root_guard: Callable[[Artifact], bool] | None = None,
         allow_unguarded_roots: bool = False,
         clock: Callable[[], str] | None = None,
+        evidence_guard: Callable[[EvidenceRecord], bool] | None = None,
     ) -> None:
         """`clock` returns the time the kernel decides at (ISO 8601 with offset). Every decision and root admission
         is stamped with it and judged as of it. It defaults to this machine's UTC clock; a deployment should hand in
@@ -47,10 +48,17 @@ class ConservationKernel:
         A kernel needs a guard. One with none would register any root it admits, with no approved decision
         required, so building it raises `UnguardedKernelError` unless you pass `allow_unguarded_roots=True` to say
         that is deliberate (a test, a tool that never registers roots). The flag is greppable on purpose: it is the
-        list of places that have not yet decided what authorizes a root."""
+        list of places that have not yet decided what authorizes a root.
+
+        `evidence_guard` makes adding evidence depend on a permission the caller holds: the registry asks it before
+        adding any evidence record, whether through `kernel.registry.add_evidence` or any other route to it. It is
+        optional, and with none any caller may add evidence, as before. To guard a registry you pass in, build it with
+        `EvidenceRegistry(evidence_guard=...)`."""
         if root_guard is not None and ledger is not None:
             raise ValueError("pass the root guard to the ledger you supply, not to the kernel as well")
-        self.registry = registry or EvidenceRegistry()
+        if evidence_guard is not None and registry is not None:
+            raise ValueError("pass the evidence guard to the registry you supply, not to the kernel as well")
+        self.registry = registry or EvidenceRegistry(evidence_guard=evidence_guard)
         self.clock = clock or utc_now
         self.verifier = verifier or IndependentVerifier()
         self.ledger = ledger or ConservationLedger(root_guard=root_guard)
@@ -67,6 +75,11 @@ class ConservationKernel:
         """Whether this kernel registers a root only with a guard's permission. A caller deciding whether to
         trust this kernel with an approval can read this; it cannot be turned off after construction."""
         return self.ledger.has_root_guard
+
+    @property
+    def has_evidence_guard(self) -> bool:
+        """Whether this kernel's registry adds evidence only with a guard's permission."""
+        return self.registry.has_evidence_guard
 
     STRONG_EPISTEMIC = frozenset({EpistemicStatus.FACT, EpistemicStatus.OBSERVATION})
     AUTHORITATIVE = frozenset({AuthorityStatus.HUMAN_AUTHORIZED, AuthorityStatus.CANONICAL, AuthorityStatus.EXECUTED})
@@ -181,7 +194,8 @@ class ConservationKernel:
                       root_guard: Callable[[Artifact], bool] | None = None,
                       allow_unguarded_roots: bool = False,
                       clock: Callable[[], str] | None = None,
-                      require_bounded: bool = False) -> "ConservationKernel":
+                      require_bounded: bool = False,
+                      evidence_guard: Callable[[EvidenceRecord], bool] | None = None) -> "ConservationKernel":
         """A kernel continuing from `snapshot()`.
 
         The digest is checked first (corruption). Then, with `reverify`, every
@@ -206,7 +220,7 @@ class ConservationKernel:
             if problem:
                 raise SnapshotAuthenticityError(f"snapshot not authenticated: {problem}")
         registry = EvidenceRegistry.restore(body.get("registry", {}), trusted_humans=trusted_humans,
-                                            require_bounded=require_bounded)
+                                            require_bounded=require_bounded, evidence_guard=evidence_guard)
         ledger = ConservationLedger.restore(body.get("ledger", {}), root_guard=root_guard)
         kernel = cls(registry=registry, ledger=ledger, allow_unguarded_roots=allow_unguarded_roots, clock=clock)
         if reverify:

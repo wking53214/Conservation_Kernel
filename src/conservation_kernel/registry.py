@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from .errors import InvalidEvent
 from .events import AuthorizationEvent, DelegationEvent, EvidenceRecord, RevocationEvent, instant
 
@@ -19,7 +21,14 @@ class EvidenceRegistry:
     """
 
     def __init__(self, *, trusted_humans: set[str] | frozenset[str] | None = None,
-                 require_bounded: bool = False) -> None:
+                 require_bounded: bool = False,
+                 evidence_guard: Callable[[EvidenceRecord], bool] | None = None) -> None:
+        """`evidence_guard`, if given, is asked before any evidence record is added, and the record is added only if it
+        answers exactly True. It is the caller's own permission check (the kernel imports nothing to supply one); a
+        guard that raises or answers anything else refuses, and a refused record leaves the registry as it was. It is
+        asked after the registry has refused what it refuses itself (a duplicate id), so a one-use permission is not
+        spent on a record that could never go in. Rebuilding a registry from a snapshot does not ask it. With none
+        (the default) any caller may add evidence, as before."""
         # ActorKind.HUMAN is a self-declaration on a caller-supplied dataclass:
         # a machine that constructs Actor("agent", kind=HUMAN) mints valid
         # human authorizations (measured 2026-09-08). The kernel cannot know
@@ -31,6 +40,7 @@ class EvidenceRegistry:
         # Off by default, so nothing changes until a deployer asks: with it on, an authorization must say when it
         # stops holding (`valid_until`). An open-ended one is refused, live and on restore.
         self.require_bounded = require_bounded
+        self._evidence_guard = evidence_guard
         self._evidence: dict[str, EvidenceRecord] = {}
         self._authorizations: dict[str, AuthorizationEvent] = {}
         self._delegations: dict[str, DelegationEvent] = {}
@@ -38,9 +48,21 @@ class EvidenceRegistry:
         # handed in by whoever records it (ConservationKernel.revoke passes its own), never the revoker's claim.
         self._revocations: dict[str, tuple[RevocationEvent, str]] = {}
 
+    @property
+    def has_evidence_guard(self) -> bool:
+        """Whether adding evidence depends on a guard. Says nothing about what the guard will answer."""
+        return self._evidence_guard is not None
+
     def add_evidence(self, record: EvidenceRecord) -> None:
         if record.evidence_id in self._evidence:
             raise InvalidEvent(f"duplicate evidence ID {record.evidence_id}")
+        if self._evidence_guard is not None:
+            try:
+                permitted = self._evidence_guard(record) is True
+            except Exception:  # a guard that cannot answer never permits
+                permitted = False
+            if not permitted:
+                raise InvalidEvent(f"evidence {record.evidence_id} refused: the evidence guard did not authorize this record")
         self._evidence[record.evidence_id] = record
 
     def add_authorization(self, event: AuthorizationEvent) -> None:
@@ -264,10 +286,12 @@ class EvidenceRegistry:
         }
 
     @classmethod
-    def restore(cls, snapshot: dict, *, trusted_humans=None, require_bounded: bool = False) -> "EvidenceRegistry":
+    def restore(cls, snapshot: dict, *, trusted_humans=None, require_bounded: bool = False,
+                evidence_guard: Callable[[EvidenceRecord], bool] | None = None) -> "EvidenceRegistry":
         """A registry rebuilt from `snapshot()`. Authorizations go through
         add_authorization, so a trusted-humans binding and `require_bounded`
-        are enforced on restore as they were live."""
+        are enforced on restore as they were live. The evidence in the snapshot is not put to `evidence_guard`
+        (it was guarded, or not, when first added); the guard governs evidence added after."""
         registry = cls(trusted_humans=trusted_humans, require_bounded=require_bounded)
         for item in snapshot.get("evidence", []):
             registry.add_evidence(EvidenceRecord.from_dict(item))
@@ -277,6 +301,7 @@ class EvidenceRegistry:
             registry.add_authorization(AuthorizationEvent.from_dict(item))
         for item in snapshot.get("revocations", []):
             registry.add_revocation(RevocationEvent.from_dict(item["revocation"]), recorded_at=item["recorded_at"])
+        registry._evidence_guard = evidence_guard
         return registry
 
 
