@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from .errors import InvalidEvent
-from .events import AuthorizationEvent, EvidenceRecord, RevocationEvent, instant
+from .events import AuthorizationEvent, DelegationEvent, EvidenceRecord, RevocationEvent, instant
+
+#: The longest chain of delegations: one a trusted human issues, plus up to this many minus one re-delegations.
+MAX_DELEGATION_DEPTH = 3
 
 
 class EvidenceRegistry:
@@ -30,6 +33,7 @@ class EvidenceRegistry:
         self.require_bounded = require_bounded
         self._evidence: dict[str, EvidenceRecord] = {}
         self._authorizations: dict[str, AuthorizationEvent] = {}
+        self._delegations: dict[str, DelegationEvent] = {}
         # revocation id -> (the revocation, when the registry recorded it). Recorded time is the deployer's clock,
         # handed in by whoever records it (ConservationKernel.revoke passes its own), never the revoker's claim.
         self._revocations: dict[str, tuple[RevocationEvent, str]] = {}
@@ -40,7 +44,17 @@ class EvidenceRegistry:
         self._evidence[record.evidence_id] = record
 
     def add_authorization(self, event: AuthorizationEvent) -> None:
-        if self.trusted_humans is not None and event.authorized_by.actor_id not in self.trusted_humans:
+        if event.under_delegation is not None:
+            # Its author's power comes from the delegation, not from being trusted directly. Whether the chain is in
+            # force and covers this authorization is decided when it is used (`in_force`); who may cite it is decided here.
+            delegation = self._delegations.get(event.under_delegation)
+            if delegation is None:
+                raise InvalidEvent(f"authorization {event.authorization_id} cites delegation {event.under_delegation}, "
+                                   "which this registry does not hold")
+            if delegation.delegate_id != event.authorized_by.actor_id:
+                raise InvalidEvent(f"authorization {event.authorization_id} is by {event.authorized_by.actor_id!r}, but "
+                                   f"delegation {delegation.delegation_id} is delegated to {delegation.delegate_id!r}")
+        elif self.trusted_humans is not None and event.authorized_by.actor_id not in self.trusted_humans:
             raise InvalidEvent(
                 f"authorization {event.authorization_id} is by {event.authorized_by.actor_id!r}, "
                 "which this registry does not recognise as a human authorizer"
@@ -50,9 +64,61 @@ class EvidenceRegistry:
                 f"authorization {event.authorization_id} has no end (valid_until), and this registry accepts only "
                 "authorizations that stop holding at a stated time"
             )
-        if event.authorization_id in self._authorizations:
+        if event.authorization_id in self._authorizations or event.authorization_id in self._delegations:
             raise InvalidEvent(f"duplicate authorization ID {event.authorization_id}")
         self._authorizations[event.authorization_id] = event
+
+    def add_delegation(self, event: DelegationEvent) -> None:
+        """Record a delegation of the power to authorize (see `DelegationEvent`).
+
+        A delegation with no parent must be issued by a human this registry trusts, where it names them. One with a
+        parent must cite a delegation already here that allows re-delegation, be issued by that delegation's
+        delegate, stay inside its scope, and keep the chain within `MAX_DELEGATION_DEPTH`. Because a parent must
+        already be here, a chain cannot loop. Ids are unique across authorizations and delegations, so a revocation
+        names exactly one of them."""
+        if self.require_bounded and event.valid_until is None:
+            raise InvalidEvent(
+                f"delegation {event.delegation_id} has no end (valid_until), and this registry accepts only "
+                "delegations that stop holding at a stated time"
+            )
+        if event.delegation_id in self._delegations or event.delegation_id in self._authorizations:
+            raise InvalidEvent(f"duplicate delegation ID {event.delegation_id}")
+        if event.parent_delegation_id is None:
+            if self.trusted_humans is not None and event.delegator.actor_id not in self.trusted_humans:
+                raise InvalidEvent(
+                    f"delegation {event.delegation_id} is by {event.delegator.actor_id!r}, "
+                    "which this registry does not recognise as a human authorizer"
+                )
+        else:
+            parent = self._delegations.get(event.parent_delegation_id)
+            if parent is None:
+                raise InvalidEvent(f"delegation {event.delegation_id} cites parent {event.parent_delegation_id}, "
+                                   "which this registry does not hold")
+            if not parent.may_redelegate:
+                raise InvalidEvent(f"delegation {parent.delegation_id} does not allow re-delegating it")
+            if event.delegator.actor_id != parent.delegate_id:
+                raise InvalidEvent(f"delegation {event.delegation_id} is by {event.delegator.actor_id!r}, but "
+                                   f"delegation {parent.delegation_id} is delegated to {parent.delegate_id!r}")
+            wider = [name for name in ("subject_ids", "transition_kinds", "to_values")
+                     if any(item not in getattr(parent, name) for item in getattr(event, name))]
+            if wider:
+                raise InvalidEvent(f"delegation {event.delegation_id} is wider than its parent in: {', '.join(wider)}")
+            if len(self._chain(parent.delegation_id)) + 1 > MAX_DELEGATION_DEPTH:
+                raise InvalidEvent(f"delegation {event.delegation_id} would make a chain deeper than "
+                                   f"{MAX_DELEGATION_DEPTH}")
+        self._delegations[event.delegation_id] = event
+
+    def delegation(self, delegation_id: str) -> DelegationEvent | None:
+        return self._delegations.get(delegation_id)
+
+    def _chain(self, delegation_id: str) -> list[DelegationEvent]:
+        """The delegation and its ancestors, nearest first."""
+        chain: list[DelegationEvent] = []
+        current = self._delegations.get(delegation_id)
+        while current is not None and len(chain) <= MAX_DELEGATION_DEPTH:
+            chain.append(current)
+            current = self._delegations.get(current.parent_delegation_id) if current.parent_delegation_id else None
+        return chain
 
     def add_revocation(self, event: RevocationEvent, *, recorded_at: str) -> None:
         """Record `event` as of `recorded_at` (ISO 8601 with offset), the recording clock's time.
@@ -98,9 +164,19 @@ class EvidenceRegistry:
         An open-ended, unrevoked authorization holds whenever it is consulted, as every authorization did before
         windows and revocation. Otherwise it holds only inside its window and before any revocation of it takes
         effect, and only if `as_of` is a time this can read: an unknown time (None) or an unreadable one cannot
-        show it is in force, so it does not count."""
-        revoked_from = self._revoked_from(event.authorization_id)
-        if not event.windowed and not revoked_from:
+        show it is in force, so it does not count. One issued under a delegation also needs every link of that
+        delegation's chain to cover it and, by the same rules, to be in force at `as_of`."""
+        links: list = [(event, event.authorization_id)]
+        if event.under_delegation is not None:
+            chain = self._chain(event.under_delegation)
+            if not chain or chain[0].delegation_id != event.under_delegation:
+                return False
+            # Every link must cover this very change; re-delegation only narrows, but each link is checked anyway.
+            if not all(link.covers(event.subject_id, event.transition_kind, event.to_value) for link in chain):
+                return False
+            links += [(link, link.delegation_id) for link in chain]
+        revoked = {link_id: self._revoked_from(link_id) for _, link_id in links}
+        if not any(link.windowed or revoked[link_id] for link, link_id in links):
             return True
         if as_of is None:
             return False
@@ -108,9 +184,8 @@ class EvidenceRegistry:
             moment = instant(as_of, "as_of")
         except InvalidEvent:
             return False
-        if any(start <= moment for start in revoked_from):
-            return False
-        return event.holds_at(moment)
+        return all(link.holds_at(moment) and not any(start <= moment for start in revoked[link_id])
+                   for link, link_id in links)
 
     def at(self, as_of: str | None) -> "RegistryAt":
         """This registry as of one moment: an authorization counts only if it is in force then.
@@ -177,6 +252,7 @@ class EvidenceRegistry:
         return {
             "evidence": [item.to_dict() for item in self._evidence.values()],
             "authorizations": [item.to_dict() for item in self._authorizations.values()],
+            **({"delegations": [item.to_dict() for item in self._delegations.values()]} if self._delegations else {}),
             # Present only when there are any, so a registry with none keeps its old shape.
             **({"revocations": [{"revocation": event.to_dict(), "recorded_at": recorded_at}
                                 for event, recorded_at in self._revocations.values()]}
@@ -191,6 +267,8 @@ class EvidenceRegistry:
         registry = cls(trusted_humans=trusted_humans, require_bounded=require_bounded)
         for item in snapshot.get("evidence", []):
             registry.add_evidence(EvidenceRecord.from_dict(item))
+        for item in snapshot.get("delegations", []):             # before the authorizations that cite them
+            registry.add_delegation(DelegationEvent.from_dict(item))
         for item in snapshot.get("authorizations", []):
             registry.add_authorization(AuthorizationEvent.from_dict(item))
         for item in snapshot.get("revocations", []):
