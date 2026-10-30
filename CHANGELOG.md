@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- `AuthorizationEvent(subject_digest=...)` binds an authorization to the words it approves. One authorization for p-1
+  becoming `HUMAN_AUTHORIZED` used to admit both "Refund customer $10." and "Refund customer $10,000,000.", because
+  matching used only the subject id, the kind of change and the target value. `Proposition.canonical_digest` (id, text
+  and conditions, not the status an authorization is about to change) is the value to bind to. When an authorization
+  carries a digest it must equal that of the proposition it is used for, at root admission, in every verifier check,
+  and for a new proposition's authority and canonical state; a caller that does not name the content cannot use it.
+  The field is optional, round-trips in snapshots and is absent from the dict when unset, so existing digests do not
+  change. `ConservationKernel(require_content_bound=True)` (or `EvidenceRegistry(require_content_bound=True)`) refuses an
+  authorization with no digest, live and on restore. Default `False`.
 - `ledger.add_initial` on a ledger a kernel owns applies the kernel's `admit_root`, before the root guard, so a root that
   cites evidence or authorizations the registry does not hold is refused through either door; it used to register
   through `kernel.ledger.add_initial` although `register_root` refused it. `register_root` now delegates to it. A ledger

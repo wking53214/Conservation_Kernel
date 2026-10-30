@@ -34,11 +34,15 @@ AUTHORITY_ORDER = {
 STRONG_EPISTEMIC = frozenset({EpistemicStatus.FACT, EpistemicStatus.OBSERVATION})
 
 
-def _reaches(event: Any, new: Proposition, subject_ids: set[str]) -> bool:
+def _reaches(event: Any, new: Proposition, subject_ids: set[str], input_props: dict[str, Proposition], registry: Any) -> bool:
     """Whether an authorization can back a new proposition. One about the proposition or a parent can, except that a
     delegated authorization reaches only the very subject it names: a delegation lists its subjects one by one, and
-    the parent rule would otherwise let one delegated authorization back any number of new propositions."""
+    the parent rule would otherwise let one delegated authorization back any number of new propositions. One bound to
+    content (`subject_digest`) must match the words of the subject it names, the new proposition or that parent."""
     if event.subject_id not in subject_ids:
+        return False
+    subject = new if event.subject_id == new.proposition_id else input_props.get(event.subject_id)
+    if subject is None or not registry.binds(event, subject.canonical_digest):
         return False
     return getattr(event, "under_delegation", None) is None or event.subject_id == new.proposition_id
 
@@ -257,6 +261,7 @@ class IndependentVerifier:
         authorized = registry.has_authorization(
             refs,
             subject_id=old.proposition_id,
+            subject_digest=old.canonical_digest,
             transition_kind=TransitionKind.EVIDENCE_REDACTION,
             from_value="present",
             to_value="absent",
@@ -274,6 +279,7 @@ class IndependentVerifier:
             if not registry.has_authorization(
                 auth_refs,
                 subject_id=new.proposition_id,
+                subject_digest=new.canonical_digest,
                 transition_kind=TransitionKind.HUMAN_ADOPTION,
                 from_value=old.origin.value,
                 to_value=new.origin.value,
@@ -310,6 +316,7 @@ class IndependentVerifier:
             if old.epistemic_status is not EpistemicStatus.OBSERVATION and not registry.has_authorization(
                 auth_refs,
                 subject_id=new.proposition_id,
+                subject_digest=new.canonical_digest,
                 transition_kind=TransitionKind.EPISTEMIC_PROMOTION,
                 from_value=old.epistemic_status.value,
                 to_value=target.value,
@@ -320,6 +327,7 @@ class IndependentVerifier:
             if not registry.has_authorization(
                 auth_refs,
                 subject_id=new.proposition_id,
+                subject_digest=new.canonical_digest,
                 transition_kind=TransitionKind.AUTHORITY_ESCALATION,
                 from_value=old.epistemic_status.value,
                 to_value=target.value,
@@ -329,6 +337,7 @@ class IndependentVerifier:
         if target is EpistemicStatus.DECISION and not registry.has_authorization(
             auth_refs,
             subject_id=new.proposition_id,
+            subject_digest=new.canonical_digest,
             transition_kind=TransitionKind.AUTHORITY_ESCALATION,
             from_value=old.epistemic_status.value,
             to_value=target.value,
@@ -342,6 +351,7 @@ class IndependentVerifier:
         if increasing and not registry.has_authorization(
             auth_refs,
             subject_id=new.proposition_id,
+            subject_digest=new.canonical_digest,
             transition_kind=TransitionKind.AUTHORITY_ESCALATION,
             from_value=old.authority.value,
             to_value=new.authority.value,
@@ -362,6 +372,7 @@ class IndependentVerifier:
         if not increasing and old.authority in {AuthorityStatus.CANONICAL, AuthorityStatus.EXECUTED} and not registry.has_authorization(
             auth_refs,
             subject_id=new.proposition_id,
+            subject_digest=new.canonical_digest,
             transition_kind=TransitionKind.AUTHORITY_ESCALATION,
             from_value=old.authority.value,
             to_value=new.authority.value,
@@ -387,6 +398,7 @@ class IndependentVerifier:
         if not registry.has_authorization(
             auth_refs,
             subject_id=new.proposition_id,
+            subject_digest=new.canonical_digest,
             transition_kind=TransitionKind.TEMPORAL_RECLASSIFICATION,
             from_value=old.temporal.to_dict(),
             to_value=new.temporal.to_dict(),
@@ -404,6 +416,7 @@ class IndependentVerifier:
         if not registry.has_authorization(
             auth_refs,
             subject_id=new.proposition_id,
+            subject_digest=new.canonical_digest,
             transition_kind=TransitionKind.SCOPE_WIDENING,
             from_value=list(old.conditions),
             to_value=list(new.conditions),
@@ -418,6 +431,7 @@ class IndependentVerifier:
             authorized = registry.has_authorization(
                 auth_refs,
                 subject_id=new.proposition_id,
+                subject_digest=new.canonical_digest,
                 transition_kind=TransitionKind.EVIDENCE_REDACTION,
                 from_value=sorted(old_refs),
                 to_value=sorted(new_refs),
@@ -463,6 +477,7 @@ class IndependentVerifier:
         if not registry.has_authorization(
             auth_refs,
             subject_id=new.proposition_id,
+            subject_digest=new.canonical_digest,
             transition_kind=TransitionKind.CANONICALIZATION,
             from_value=old.canonical_state.value,
             to_value=new.canonical_state.value,
@@ -501,7 +516,7 @@ class IndependentVerifier:
             # parent, and it must grant this authority.
             if not any(
                 (event := registry.authorization(ref)) is not None
-                and _reaches(event, new, subject_ids)
+                and _reaches(event, new, subject_ids, input_props, registry)
                 and event.transition_kind is TransitionKind.AUTHORITY_ESCALATION
                 and event.to_value == new.authority.value
                 for ref in auth_refs
@@ -510,7 +525,7 @@ class IndependentVerifier:
         if new.canonical_state in {CanonicalState.ACCEPTED, CanonicalState.CANONICAL, CanonicalState.SUPERSEDED, CanonicalState.REVOKED, CanonicalState.DELETED}:
             if not any(
                 (event := registry.authorization(ref)) is not None
-                and _reaches(event, new, subject_ids)
+                and _reaches(event, new, subject_ids, input_props, registry)
                 and event.transition_kind is TransitionKind.CANONICALIZATION
                 and event.to_value == new.canonical_state.value
                 for ref in auth_refs
@@ -529,7 +544,7 @@ class IndependentVerifier:
         }
         if inherited - set(new.conditions) and not any(
             (event := registry.authorization(ref)) is not None
-            and _reaches(event, new, subject_ids)
+            and _reaches(event, new, subject_ids, input_props, registry)
             and event.transition_kind is TransitionKind.SCOPE_WIDENING
             and event.to_value == list(new.conditions)
             for ref in auth_refs

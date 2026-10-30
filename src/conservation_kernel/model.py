@@ -270,6 +270,15 @@ class Proposition:
             ) from exc
         object.__setattr__(self, "metadata", MappingProxyType(metadata))
 
+    @property
+    def canonical_digest(self) -> str:
+        """A digest of what this proposition claims: its id, its text and the conditions it holds under.
+
+        It leaves out the status a transformation may be about to change (authority, canonical state, evidence and
+        authorization refs), so a human authorization can be bound to the words they approved before that approval is
+        written onto the proposition. See `AuthorizationEvent.subject_digest`."""
+        return _digest({"proposition_id": self.proposition_id, "text": self.text, "conditions": list(self.conditions)})
+
     def to_dict(self) -> dict[str, Any]:
         result = {
             "proposition_id": self.proposition_id,
