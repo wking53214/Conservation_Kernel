@@ -82,6 +82,13 @@
   repository's retirement. Only the scope axis is enforced; certainty and
   permanence were already covered by `UNCERTAINTY_COLLAPSE` and
   `UNAUTHORIZED_TEMPORAL_CHANGE`, and significance needs human judgment.
+- `ConservationLedger.commit` refuses an output with no parents. Such an
+  artifact is a root, and roots enter through `add_initial`, which asks the root
+  guard; `commit` took any output whose result said PASS, so a caller holding the
+  ledger could write a result by hand and plant a root past a closed guard.
+  `ConservationKernel.submit` already rejected a transformation with no inputs,
+  so only the direct ledger call changes. A snapshot holding such a root already
+  failed to reload; now it cannot be made live either.
 
 ## 0.1.0 (2026-09-07)
 

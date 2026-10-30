@@ -88,6 +88,11 @@ class ConservationLedger:
             raise LedgerError("result and output IDs do not match")
         if output.artifact_id in self._artifacts:
             raise LedgerError(f"duplicate artifact ID {output.artifact_id}")
+        if not output.parent_artifact_ids:
+            # An output with no parents is a root. Roots enter through `add_initial`, which asks the root guard;
+            # letting one in here would walk around that guard with a result the caller wrote by hand.
+            raise LedgerError(f"artifact {output.artifact_id} has no parents, so it is a root; "
+                              "roots are added with add_initial, which asks the root guard")
         for parent in output.parent_artifact_ids:
             if parent not in self._artifacts:
                 raise LedgerError(f"parent artifact {parent} is not in the ledger")
