@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `CnsRootAdmissionGate(kernel, require_evidence_guard=True)` refuses (`TERMINAL_BREACH`) a kernel built without an
+  evidence guard, the way `require_guard=True` does for the root guard, so a roster that issues approvals can insist
+  the kernel's registry will not take evidence from just any caller. Default `False`: the gate judges exactly as
+  before, and the two flags are independent.
 - `EvidenceRegistry(evidence_guard=...)` and `ConservationKernel(evidence_guard=...)`: an optional caller permission for
   adding evidence, the way `root_guard` is for roots. The guard is asked with the record and permits only by answering
   exactly `True`; a raise or any other answer refuses with `InvalidEvent` and leaves the registry unchanged. A

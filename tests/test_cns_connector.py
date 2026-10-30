@@ -1164,3 +1164,40 @@ def test_require_guard_refuses_a_kernel_with_no_guard_and_passes_one_with_a_guar
     assert refused.outcome.value == "terminal_breach" and "no root guard" in refused.reason
     allowed = CnsRootAdmissionGate(ConservationKernel(root_guard=lambda a: False), require_guard=True).check(guard_root())
     assert allowed.outcome.value == "pass"
+
+
+# -- a roster can insist that the kernel carries an evidence guard -----------
+
+def test_the_root_gate_does_not_ask_for_an_evidence_guard_by_default():
+    from conservation_kernel import ConservationKernel
+    from conservation_kernel.cns_connector import CnsRootAdmissionGate
+    from tests.test_root_guard import root as guard_root
+    result = CnsRootAdmissionGate(ConservationKernel(root_guard=lambda a: False)).check(guard_root())
+    assert result.outcome.value == "pass"
+
+
+def test_require_evidence_guard_refuses_a_kernel_with_no_evidence_guard_and_passes_one_with_it():
+    from conservation_kernel import ConservationKernel
+    from conservation_kernel.cns_connector import CnsRootAdmissionGate
+    from tests.test_root_guard import root as guard_root
+    bare = ConservationKernel(root_guard=lambda a: False)
+    refused = CnsRootAdmissionGate(bare, require_evidence_guard=True).check(guard_root())
+    assert refused.outcome.value == "terminal_breach" and "no evidence guard" in refused.reason
+    guarded = ConservationKernel(root_guard=lambda a: False, evidence_guard=lambda record: False)
+    allowed = CnsRootAdmissionGate(guarded, require_evidence_guard=True).check(guard_root())
+    assert allowed.outcome.value == "pass"
+
+
+def test_the_two_requirements_are_independent_and_both_reasons_are_given_when_both_fail():
+    from conservation_kernel import ConservationKernel
+    from conservation_kernel.cns_connector import CnsRootAdmissionGate
+    from tests.test_root_guard import root as guard_root
+    kernel = ConservationKernel(allow_unguarded_roots=True)
+    both = CnsRootAdmissionGate(kernel, require_guard=True, require_evidence_guard=True).check(guard_root())
+    assert "no root guard" in both.reason and "no evidence guard" in both.reason
+    only_root = CnsRootAdmissionGate(ConservationKernel(evidence_guard=lambda r: True, allow_unguarded_roots=True),
+                                     require_guard=True, require_evidence_guard=True).check(guard_root())
+    assert "no root guard" in only_root.reason and "no evidence guard" not in only_root.reason
+    only_evidence = CnsRootAdmissionGate(ConservationKernel(root_guard=lambda a: True),
+                                         require_guard=True, require_evidence_guard=True).check(guard_root())
+    assert "no evidence guard" in only_evidence.reason and "no root guard" not in only_evidence.reason
