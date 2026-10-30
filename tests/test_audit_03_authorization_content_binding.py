@@ -39,7 +39,7 @@ def authorization(auth_id="auth-1", digest=None, text=SMALL):
 
 
 def kernel(**options):
-    return ConservationKernel(root_guard=lambda artifact: True, **options)
+    return ConservationKernel(root_guard=lambda artifact: True, **options, allow_unguarded_evidence=True)
 
 
 def root(text, artifact_id):
@@ -166,7 +166,7 @@ def test_content_binding_is_not_required_by_default():
 
 def test_the_option_belongs_to_the_registry_a_caller_supplies_not_to_the_kernel_as_well():
     with pytest.raises(ValueError, match="registry you supply"):
-        ConservationKernel(registry=EvidenceRegistry(), root_guard=lambda artifact: True, require_content_bound=True)
+        ConservationKernel(registry=EvidenceRegistry(), root_guard=lambda artifact: True, require_content_bound=True, allow_unguarded_evidence=True)
 
 
 # ---------------------------------------------------------------- snapshot round trip
@@ -178,7 +178,7 @@ def test_the_digest_survives_a_snapshot_and_an_unbound_authorization_keeps_its_o
     stored = {item["authorization_id"]: item for item in k.snapshot()["registry"]["authorizations"]}
     assert stored["auth-bound"]["subject_digest"] == prop(SMALL).canonical_digest
     assert "subject_digest" not in stored["auth-plain"]
-    restored = ConservationKernel.from_snapshot(k.snapshot(), root_guard=lambda artifact: True)
+    restored = ConservationKernel.from_snapshot(k.snapshot(), root_guard=lambda artifact: True, allow_unguarded_evidence=True)
     assert restored.registry.authorization("auth-bound").subject_digest == prop(SMALL).canonical_digest
     assert restored.registry.authorization("auth-plain").subject_digest is None
     assert restored.snapshot() == k.snapshot()
@@ -188,7 +188,7 @@ def test_a_restore_that_requires_content_binding_refuses_an_unbound_authorizatio
     k = kernel()
     k.registry.add_authorization(authorization("auth-plain"))
     with pytest.raises(InvalidEvent, match="subject_digest"):
-        ConservationKernel.from_snapshot(k.snapshot(), root_guard=lambda artifact: True, require_content_bound=True)
+        ConservationKernel.from_snapshot(k.snapshot(), root_guard=lambda artifact: True, require_content_bound=True, allow_unguarded_evidence=True)
 
 
 def test_an_empty_digest_is_not_a_digest():

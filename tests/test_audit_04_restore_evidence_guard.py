@@ -23,7 +23,7 @@ def planted(evidence_id="ev-planted", subject="p-1"):
 
 
 def snapshot_with(*records):
-    source = ConservationKernel(allow_unguarded_roots=True)
+    source = ConservationKernel(allow_unguarded_roots=True, allow_unguarded_evidence=True)
     for record in records:
         source.registry.add_evidence(record)
     return source.snapshot()
@@ -73,6 +73,6 @@ def test_one_refused_record_refuses_the_whole_restore_rather_than_loading_the_re
 
 def test_a_snapshot_restores_unchanged_when_no_guard_is_configured():
     snapshot = snapshot_with(planted())
-    restored = ConservationKernel.from_snapshot(snapshot, allow_unguarded_roots=True)
+    restored = ConservationKernel.from_snapshot(snapshot, allow_unguarded_roots=True, allow_unguarded_evidence=True)
     assert restored.has_evidence_guard is False and restored.registry.evidence("ev-planted") is not None
     assert restored.snapshot() == snapshot

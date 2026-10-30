@@ -20,7 +20,7 @@ BOT = Actor("bot", ActorKind.SYSTEM)
 
 
 def _kernel():
-    return ConservationKernel(root_guard=lambda artifact: True)
+    return ConservationKernel(root_guard=lambda artifact: True, allow_unguarded_evidence=True)
 
 
 def _cites_missing_evidence():
@@ -57,7 +57,7 @@ def test_a_forged_authoritative_root_is_refused_through_the_ledger_door():
 
 def test_the_registry_is_asked_before_the_root_guard_so_a_one_use_permission_is_not_spent():
     asked = []
-    kernel = ConservationKernel(root_guard=lambda artifact: asked.append(artifact.artifact_id) or True)
+    kernel = ConservationKernel(root_guard=lambda artifact: asked.append(artifact.artifact_id) or True, allow_unguarded_evidence=True)
     with pytest.raises(RootAdmissionError, match="evidence_refs not in registry"):
         kernel.ledger.add_initial(_cites_missing_evidence())
     assert asked == []

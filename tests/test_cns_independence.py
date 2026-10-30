@@ -76,7 +76,7 @@ def test_the_kernel_still_judges_transformations_with_cns_blocked():
         from conservation_kernel.experiments import (
             build_ground_truth, hostile_cases, legitimate_transformation)
         base, registry = build_ground_truth()
-        kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry)
+        kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry, allow_unguarded_evidence=True)
         kernel.register_root(base)
         output, record = legitimate_transformation(base, 1)
         assert kernel.submit(base, output, record).accepted
@@ -130,7 +130,7 @@ def test_constructing_a_gate_fails_at_construction_not_first_use():
             CnsGate, CnsNotInstalled, CnsRootAdmissionGate)
         for build in (
             lambda: CnsGate(EvidenceRegistry()),
-            lambda: CnsRootAdmissionGate(ConservationKernel(allow_unguarded_roots=True)),
+            lambda: CnsRootAdmissionGate(ConservationKernel(allow_unguarded_roots=True, allow_unguarded_evidence=True)),
         ):
             try:
                 build()
@@ -154,7 +154,7 @@ def test_submit_to_cns_without_cns_raises_before_the_kernel_is_touched():
         from conservation_kernel.experiments import (
             build_ground_truth, legitimate_transformation)
         base, registry = build_ground_truth()
-        kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry)
+        kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry, allow_unguarded_evidence=True)
         kernel.register_root(base)
         before = kernel.ledger.snapshot()
         output, record = legitimate_transformation(base, 1)
@@ -223,7 +223,7 @@ def test_importing_and_using_the_package_never_loads_cns_even_when_it_is_install
         from conservation_kernel.experiments import (
             build_ground_truth, hostile_cases, legitimate_transformation)
         base, registry = build_ground_truth()
-        kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry)
+        kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry, allow_unguarded_evidence=True)
         kernel.register_root(base)
         output, record = legitimate_transformation(base, 1)
         assert kernel.submit(base, output, record).accepted

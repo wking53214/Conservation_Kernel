@@ -14,7 +14,7 @@ class InvalidEvent(KernelError):
 
 
 class UnguardedKernelError(KernelError):
-    """A kernel was built with no root guard and without saying that was deliberate."""
+    """A kernel was built with no root guard, or no evidence guard, and without saying that was deliberate."""
 
 
 class LedgerError(KernelError):

@@ -83,7 +83,7 @@ def test_a_kernel_hands_its_guard_to_the_registry_it_builds_and_says_so():
     with pytest.raises(InvalidEvent, match="evidence guard did not authorize"):
         kernel.registry.add_evidence(evidence())
     assert guard.asked == ["ev-1"] and kernel.registry.evidence("ev-1") is None
-    assert ConservationKernel(allow_unguarded_roots=True).has_evidence_guard is False
+    assert ConservationKernel(allow_unguarded_roots=True, allow_unguarded_evidence=True).has_evidence_guard is False
 
 
 def test_a_guard_and_a_supplied_registry_cannot_both_be_given_to_the_kernel():
@@ -110,7 +110,7 @@ def test_a_snapshot_restores_with_a_guard_in_place_and_the_guard_governs_restore
 
 
 def test_a_kernel_restored_from_a_snapshot_can_be_given_a_guard_for_later_evidence():
-    kernel = ConservationKernel(allow_unguarded_roots=True)
+    kernel = ConservationKernel(allow_unguarded_roots=True, allow_unguarded_evidence=True)
     kernel.registry.add_evidence(evidence("ev-old"))
     asked = []
 

@@ -30,14 +30,14 @@ class Guard:
 
 
 def test_without_a_guard_registration_is_unchanged():
-    kernel = ConservationKernel(allow_unguarded_roots=True)
+    kernel = ConservationKernel(allow_unguarded_roots=True, allow_unguarded_evidence=True)
     kernel.register_root(root())
     assert [a.artifact_id for a in kernel.ledger.artifacts()] == ["root-1"]
 
 
 def test_a_root_the_guard_authorizes_is_registered():
     guard = Guard(True)
-    kernel = ConservationKernel(root_guard=guard)
+    kernel = ConservationKernel(root_guard=guard, allow_unguarded_evidence=True)
     kernel.register_root(root())
     assert guard.asked == ["root-1"] and [a.artifact_id for a in kernel.ledger.artifacts()] == ["root-1"]
 
@@ -45,14 +45,14 @@ def test_a_root_the_guard_authorizes_is_registered():
 @pytest.mark.parametrize("answer", [False, None, 1, "yes", RuntimeError("no")])
 def test_a_root_the_guard_does_not_authorize_is_refused_and_leaves_no_trace(answer):
     """Only True permits: a raise, a falsy answer, or a truthy non-True answer never does."""
-    kernel = ConservationKernel(root_guard=Guard(answer))
+    kernel = ConservationKernel(root_guard=Guard(answer), allow_unguarded_evidence=True)
     with pytest.raises(RootAdmissionError, match="root guard did not authorize"):
         kernel.register_root(root())
     assert kernel.ledger.artifacts() == ()
 
 
 def test_the_ledger_called_directly_is_guarded_too():
-    kernel = ConservationKernel(root_guard=Guard(False))
+    kernel = ConservationKernel(root_guard=Guard(False), allow_unguarded_evidence=True)
     with pytest.raises(RootAdmissionError, match="root guard did not authorize"):
         kernel.ledger.add_initial(root())
     assert kernel.ledger.artifacts() == ()
@@ -61,7 +61,7 @@ def test_the_ledger_called_directly_is_guarded_too():
 def test_the_guard_is_not_asked_when_the_kernel_already_refuses_the_root():
     """An authorization that is used up (a one-shot guard) is not spent on a root that would be refused anyway."""
     guard = Guard(True)
-    kernel = ConservationKernel(root_guard=guard)
+    kernel = ConservationKernel(root_guard=guard, allow_unguarded_evidence=True)
     forged = Proposition("p-f", "The board approved.", EpistemicStatus.FACT, OriginStatus.HUMAN_ORIGINATED, source_refs=("minutes",))
     with pytest.raises(RootAdmissionError, match="must cite evidence"):
         kernel.register_root(Artifact("root-f", "x", (forged,), Actor("bot", ActorKind.SYSTEM)))
@@ -75,7 +75,7 @@ def test_the_guard_is_not_asked_when_the_kernel_already_refuses_the_root():
 
 def test_a_snapshot_still_restores_with_a_guard_in_place():
     """Restoring rebuilds a ledger that was already registered; it does not ask for permission again."""
-    source = ConservationKernel(allow_unguarded_roots=True)
+    source = ConservationKernel(allow_unguarded_roots=True, allow_unguarded_evidence=True)
     source.register_root(root())
     restored = ConservationLedger.restore(source.ledger.snapshot())
     assert [a.artifact_id for a in restored.artifacts()] == ["root-1"]
@@ -83,16 +83,16 @@ def test_a_snapshot_still_restores_with_a_guard_in_place():
 
 def test_a_guard_and_a_supplied_ledger_cannot_both_be_given_to_the_kernel():
     with pytest.raises(ValueError, match="to the ledger you supply"):
-        ConservationKernel(ledger=ConservationLedger(), root_guard=Guard())
-    kernel = ConservationKernel(ledger=ConservationLedger(root_guard=Guard(False)))
+        ConservationKernel(ledger=ConservationLedger(), root_guard=Guard(), allow_unguarded_evidence=True)
+    kernel = ConservationKernel(ledger=ConservationLedger(root_guard=Guard(False)), allow_unguarded_evidence=True)
     with pytest.raises(RootAdmissionError):
         kernel.register_root(root())
 
 
 def test_a_kernel_says_whether_it_carries_a_guard():
-    assert ConservationKernel(allow_unguarded_roots=True).has_root_guard is False
-    assert ConservationKernel(root_guard=Guard()).has_root_guard is True
-    assert ConservationKernel(ledger=ConservationLedger(root_guard=Guard())).has_root_guard is True
+    assert ConservationKernel(allow_unguarded_roots=True, allow_unguarded_evidence=True).has_root_guard is False
+    assert ConservationKernel(root_guard=Guard(), allow_unguarded_evidence=True).has_root_guard is True
+    assert ConservationKernel(ledger=ConservationLedger(root_guard=Guard()), allow_unguarded_evidence=True).has_root_guard is True
     assert ConservationLedger().has_root_guard is False
 
 
@@ -103,30 +103,30 @@ from conservation_kernel.errors import UnguardedKernelError  # noqa: E402
 
 def test_a_kernel_built_without_a_guard_is_refused_unless_that_is_said_to_be_deliberate():
     with pytest.raises(UnguardedKernelError, match="root_guard"):
-        ConservationKernel()
-    kernel = ConservationKernel(allow_unguarded_roots=True)
+        ConservationKernel(allow_unguarded_evidence=True)
+    kernel = ConservationKernel(allow_unguarded_roots=True, allow_unguarded_evidence=True)
     kernel.register_root(root())
     assert [a.artifact_id for a in kernel.ledger.artifacts()] == ["root-1"]
 
 
 def test_a_guarded_kernel_needs_no_statement():
-    ConservationKernel(root_guard=Guard())
-    ConservationKernel(ledger=ConservationLedger(root_guard=Guard()))
+    ConservationKernel(root_guard=Guard(), allow_unguarded_evidence=True)
+    ConservationKernel(ledger=ConservationLedger(root_guard=Guard()), allow_unguarded_evidence=True)
 
 
 def test_a_ledger_you_pass_in_without_a_guard_is_refused_too():
     with pytest.raises(UnguardedKernelError):
-        ConservationKernel(ledger=ConservationLedger())
+        ConservationKernel(ledger=ConservationLedger(), allow_unguarded_evidence=True)
 
 
 def test_a_restored_kernel_needs_a_guard_or_the_statement_and_the_guard_guards_later_roots():
-    source = ConservationKernel(allow_unguarded_roots=True)
+    source = ConservationKernel(allow_unguarded_roots=True, allow_unguarded_evidence=True)
     source.register_root(root())
     snapshot = source.snapshot()
     with pytest.raises(UnguardedKernelError):
-        ConservationKernel.from_snapshot(snapshot)
+        ConservationKernel.from_snapshot(snapshot, allow_unguarded_evidence=True)
     guard = Guard(False)
-    restored = ConservationKernel.from_snapshot(snapshot, root_guard=guard)
+    restored = ConservationKernel.from_snapshot(snapshot, root_guard=guard, allow_unguarded_evidence=True)
     assert [a.artifact_id for a in restored.ledger.artifacts()] == ["root-1"] and guard.asked == []
     with pytest.raises(RootAdmissionError):
         restored.register_root(root("root-2"))

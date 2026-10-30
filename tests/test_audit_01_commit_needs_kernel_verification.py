@@ -25,7 +25,7 @@ BOT = Actor("bot", ActorKind.SYSTEM)
 
 
 def _kernel():
-    return ConservationKernel(root_guard=lambda artifact: True)
+    return ConservationKernel(root_guard=lambda artifact: True, allow_unguarded_evidence=True)
 
 
 def _escalation(kernel):
@@ -71,7 +71,7 @@ def test_a_real_rejection_with_its_status_flipped_to_pass_is_refused():
 def test_a_genuine_result_cannot_be_reused_for_a_record_that_was_changed_after_it_was_verified():
     """The proof is tied to the record and output it verified, so a genuine PASS cannot vouch for different bytes."""
     base, registry = build_ground_truth()
-    kernel = ConservationKernel(registry=registry, root_guard=lambda artifact: True)
+    kernel = ConservationKernel(registry=registry, root_guard=lambda artifact: True, allow_unguarded_evidence=True)
     kernel.register_root(base)
     output, record = legitimate_transformation(base, 1)
     genuine = kernel.verifier.verify(base, output, record, kernel.registry)
@@ -84,7 +84,7 @@ def test_a_genuine_result_cannot_be_reused_for_a_record_that_was_changed_after_i
 def test_a_pass_from_a_verifier_run_against_some_other_registry_is_not_the_kernels_verdict():
     base, kernel_registry = build_ground_truth()
     _, other_registry = build_ground_truth()
-    kernel = ConservationKernel(registry=kernel_registry, root_guard=lambda artifact: True)
+    kernel = ConservationKernel(registry=kernel_registry, root_guard=lambda artifact: True, allow_unguarded_evidence=True)
     kernel.register_root(base)
     output, record = legitimate_transformation(base, 1)
     result = IndependentVerifier().verify(base, output, record, other_registry)
@@ -96,7 +96,7 @@ def test_a_pass_from_a_verifier_run_against_some_other_registry_is_not_the_kerne
 
 def test_the_kernels_own_submit_still_commits_a_legitimate_transformation():
     base, registry = build_ground_truth()
-    kernel = ConservationKernel(registry=registry, root_guard=lambda artifact: True)
+    kernel = ConservationKernel(registry=registry, root_guard=lambda artifact: True, allow_unguarded_evidence=True)
     kernel.register_root(base)
     output, record = legitimate_transformation(base, 1)
     assert kernel.submit(base, output, record).accepted

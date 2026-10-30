@@ -25,7 +25,7 @@ def _attack(name):
 
 def test_rejected_transformation_does_not_mutate_persistent_state():
     base, registry = build_ground_truth()
-    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry)
+    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry, allow_unguarded_evidence=True)
     kernel.register_root(base)
 
     baseline = kernel.reconstruct(base.artifact_id)

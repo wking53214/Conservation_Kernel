@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- A kernel now refuses to be built without an evidence guard: `ConservationKernel(...)` and `from_snapshot(...)` raise
+  `UnguardedKernelError` unless `evidence_guard=...` is given (or the registry you pass in has one) or
+  `allow_unguarded_evidence=True` says that is deliberate, mirroring `allow_unguarded_roots`. With a root guard but no
+  evidence guard, any caller could add INDEPENDENT_VERIFICATION evidence that declares itself independent and the
+  verifier would count it. **Breaking:** code that builds a kernel with no evidence guard must pass the flag. A bare
+  `EvidenceRegistry` is unchanged.
 - `AuthorizationEvent(subject_digest=...)` binds an authorization to the words it approves. One authorization for p-1
   becoming `HUMAN_AUTHORIZED` used to admit both "Refund customer $10." and "Refund customer $10,000,000.", because
   matching used only the subject id, the kind of change and the target value. `Proposition.canonical_digest` (id, text
@@ -33,8 +39,9 @@
   duplicate id is refused before the guard is asked, so a one-use permission is not spent on it. Evidence restored
   from a snapshot is put to the guard too: it is in place before the first record loads, and a record it refuses
   refuses the whole restore, so a file cannot plant evidence the guard would have refused.
-  `has_evidence_guard` says whether one is in place. With none, behaviour is exactly as before; passing a guard and a
-  registry to the kernel together is a `ValueError`, as it is for the root guard and a ledger.
+  `has_evidence_guard` says whether one is in place. With none, a registry behaves exactly as before; passing a guard and a
+  registry to the kernel together is a `ValueError`, as it is for the root guard and a ledger. (A kernel now needs
+  one, or `allow_unguarded_evidence=True`; see above.)
 - The kernel stamps when it decided. `ConservationKernel(clock=...)` (default:
   this machine's UTC clock) supplies the time of every decision and root
   admission; `VerificationResult.verified_at` and the ledger's

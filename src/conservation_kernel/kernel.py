@@ -36,6 +36,7 @@ class ConservationKernel:
         clock: Callable[[], str] | None = None,
         evidence_guard: Callable[[EvidenceRecord], bool] | None = None,
         require_content_bound: bool = False,
+        allow_unguarded_evidence: bool = False,
     ) -> None:
         """`clock` returns the time the kernel decides at (ISO 8601 with offset). Every decision and root admission
         is stamped with it and judged as of it. It defaults to this machine's UTC clock; a deployment should hand in
@@ -52,7 +53,10 @@ class ConservationKernel:
 
         `evidence_guard` makes adding evidence depend on a permission the caller holds: the registry asks it before
         adding any evidence record, whether through `kernel.registry.add_evidence` or any other route to it, and
-        about every record a snapshot restores. It is optional, and with none any caller may add evidence, as before. To guard a registry you pass in, build it with
+        about every record a snapshot restores. A kernel needs one too: with none, any caller could add evidence that
+        declares itself independent verification and the verifier would count it, so building it raises
+        `UnguardedKernelError` unless you pass `allow_unguarded_evidence=True` to say that is deliberate. As with
+        `allow_unguarded_roots`, the flag is greppable on purpose. To guard a registry you pass in, build it with
         `EvidenceRegistry(evidence_guard=...)`.
 
         `require_content_bound` makes the registry refuse an authorization that does not carry the digest of the
@@ -76,6 +80,12 @@ class ConservationKernel:
                 "ConservationKernel built without a root_guard: it would register any root it admits, with no "
                 "approved decision required. Pass root_guard=..., or allow_unguarded_roots=True if that is "
                 "deliberate."
+            )
+        if not self.registry.has_evidence_guard and not allow_unguarded_evidence:
+            raise UnguardedKernelError(
+                "ConservationKernel built without an evidence_guard: any caller could add evidence that declares "
+                "itself independent verification, and the verifier would count it. Pass evidence_guard=..., or "
+                "allow_unguarded_evidence=True if that is deliberate."
             )
         self.ledger._bind(self.registry.issuer, self.admit_root)
         self.reconstruction = ReconstructionEngine()
@@ -210,7 +220,8 @@ class ConservationKernel:
                       clock: Callable[[], str] | None = None,
                       require_bounded: bool = False,
                       evidence_guard: Callable[[EvidenceRecord], bool] | None = None,
-                      require_content_bound: bool = False) -> "ConservationKernel":
+                      require_content_bound: bool = False,
+                      allow_unguarded_evidence: bool = False) -> "ConservationKernel":
         """A kernel continuing from `snapshot()`.
 
         The digest is checked first (corruption). Then, with `reverify`, every
@@ -238,7 +249,8 @@ class ConservationKernel:
                                             require_bounded=require_bounded, evidence_guard=evidence_guard,
                                             require_content_bound=require_content_bound)
         ledger = ConservationLedger.restore(body.get("ledger", {}), root_guard=root_guard)
-        kernel = cls(registry=registry, ledger=ledger, allow_unguarded_roots=allow_unguarded_roots, clock=clock)
+        kernel = cls(registry=registry, ledger=ledger, allow_unguarded_roots=allow_unguarded_roots, clock=clock,
+                     allow_unguarded_evidence=allow_unguarded_evidence)
         if reverify:
             kernel.reverify()
         return kernel
