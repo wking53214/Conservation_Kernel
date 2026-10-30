@@ -26,13 +26,18 @@ class ConservationLedger:
         self._artifacts: dict[str, Artifact] = {}
         self._transformations: dict[str, TransformationRecord] = {}
         self._reports: list[VerificationResult] = []
+        # When the kernel admitted each root, and when it verified each committed transformation, by its clock. A
+        # restore re-judges each as of its moment. Set only by add_initial / commit (or once, on first reload, for
+        # history written before times existed), never from a later attempt that the ledger refused.
+        self._admitted_at: dict[str, str] = {}
+        self._verified_at: dict[str, str] = {}
 
     @property
     def has_root_guard(self) -> bool:
         """Whether adding an initial artifact depends on a guard. Says nothing about what the guard will answer."""
         return self._root_guard is not None
 
-    def add_initial(self, artifact: Artifact) -> None:
+    def add_initial(self, artifact: Artifact, *, admitted_at: str | None = None) -> None:
         if artifact.parent_artifact_ids:
             raise LedgerError("an initial artifact cannot already have parents")
         if artifact.artifact_id in self._artifacts:
@@ -45,6 +50,31 @@ class ConservationLedger:
             if not permitted:
                 raise RootAdmissionError("root refused: the root guard did not authorize this artifact")
         self._add_artifact(artifact)
+        if admitted_at is not None:
+            self._admitted_at[artifact.artifact_id] = admitted_at
+
+    def admitted_at(self, artifact_id: str) -> str | None:
+        """When the kernel admitted this root, or None if it was added without a time (or before stamps)."""
+        return self._admitted_at.get(artifact_id)
+
+    def verified_at(self, transformation_id: str) -> str | None:
+        """When the committed verification of this transformation was made, or None if it carries no time.
+
+        Taken from the commit itself, not from the reports: a later attempt that re-used the id was verified and
+        reported but refused by the ledger, and must not move this transformation's time."""
+        return self._verified_at.get(transformation_id)
+
+    def record_times(self, *, admitted: dict[str, str] | None = None, verified: dict[str, str] | None = None) -> None:
+        """Give a time to history that has none (roots or committed transformations written before times existed,
+        or straight to the ledger). A time already recorded is never replaced."""
+        for artifact_id, moment in (admitted or {}).items():
+            if artifact_id not in self._artifacts:
+                raise LedgerError(f"no artifact {artifact_id} to record a time for")
+            self._admitted_at.setdefault(artifact_id, moment)
+        for transformation_id, moment in (verified or {}).items():
+            if transformation_id not in self._transformations:
+                raise LedgerError(f"no transformation {transformation_id} to record a time for")
+            self._verified_at.setdefault(transformation_id, moment)
 
     def _add_artifact(self, artifact: Artifact) -> None:
         if artifact.artifact_id in self._artifacts:
@@ -66,6 +96,8 @@ class ConservationLedger:
         self._add_artifact(output)
         self._transformations[record.transformation_id] = record
         self._reports.append(result)
+        if result.verified_at is not None:
+            self._verified_at[record.transformation_id] = result.verified_at
 
     def record_rejection(self, result: VerificationResult) -> None:
         self._reports.append(result)
@@ -90,6 +122,9 @@ class ConservationLedger:
             "artifacts": [item.to_dict() for item in self._artifacts.values()],
             "transformations": [item.to_dict() for item in self._transformations.values()],
             "reports": [item.to_dict() for item in self._reports],
+            # Present only when there is something to record, so an unstamped ledger keeps its old shape.
+            **({"root_admitted_at": dict(self._admitted_at)} if self._admitted_at else {}),
+            **({"transformation_verified_at": dict(self._verified_at)} if self._verified_at else {}),
         }
 
     @classmethod
@@ -111,4 +146,13 @@ class ConservationLedger:
             ledger._transformations[record.transformation_id] = record
         for item in snapshot.get("reports", []):
             ledger._reports.append(VerificationResult.from_dict(item))
+        for artifact_id, admitted_at in snapshot.get("root_admitted_at", {}).items():
+            if artifact_id not in ledger._artifacts:
+                raise LedgerError(f"snapshot records an admission time for {artifact_id}, which is not in the snapshot")
+            ledger._admitted_at[artifact_id] = admitted_at
+        for transformation_id, verified_at in snapshot.get("transformation_verified_at", {}).items():
+            if transformation_id not in ledger._transformations:
+                raise LedgerError(f"snapshot records a verification time for {transformation_id}, "
+                                  "which is not in the snapshot")
+            ledger._verified_at[transformation_id] = verified_at
         return ledger

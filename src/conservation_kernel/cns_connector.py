@@ -504,12 +504,17 @@ class CnsGate:
         verifier: IndependentVerifier | None = None,
         *,
         subject: str = DEFAULT_SUBJECT,
+        clock: Callable[[], str] | None = None,
     ) -> None:
+        """`clock`, if given, is the time each check is judged at, as the kernel's clock is for `submit`; hand in the
+        kernel's to make the gate agree with it on time-limited authorizations. Without one the gate judges exactly
+        as `IndependentVerifier.verify` does on the registry it is given (a plain registry means the time is unknown)."""
         _cns_gate()  # fail here, at construction, not on first use
         _require_subject(subject)
         self._registry = registry
         self._verifier = verifier or IndependentVerifier()
         self._subject = subject
+        self._clock = clock
 
     @property
     def position(self) -> Any:
@@ -521,8 +526,9 @@ class CnsGate:
                 "the conservation gate judges a TransformationCandidate; "
                 f"got {type(candidate).__name__}"
             )
+        registry = self._registry.at(self._clock()) if self._clock is not None else self._registry
         result = self._verifier.verify(
-            candidate.inputs, candidate.output, candidate.record, self._registry
+            candidate.inputs, candidate.output, candidate.record, registry
         )
         return to_cns_result(result, candidate, subject=self._subject)
 
@@ -593,6 +599,7 @@ def verify_to_cns(
     *,
     verifier: IndependentVerifier | None = None,
     subject: str = DEFAULT_SUBJECT,
+    clock: Callable[[], str] | None = None,
 ) -> Any:
     """Run ``IndependentVerifier.verify`` and return the verdict as a CNS verdict.
 
@@ -601,7 +608,7 @@ def verify_to_cns(
     ``cns.gate.resolve([verdict, ...])``.
     """
     candidate = TransformationCandidate(input_artifacts, output, record)
-    return CnsGate(registry, verifier, subject=subject).check(candidate)
+    return CnsGate(registry, verifier, subject=subject, clock=clock).check(candidate)
 
 
 def submit_to_cns(

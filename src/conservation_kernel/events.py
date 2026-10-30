@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from datetime import datetime
 from types import MappingProxyType
 from typing import Any, Mapping
 
@@ -37,6 +38,49 @@ def _tuple(values: Any, name: str) -> tuple[str, ...]:
     if len(set(result)) != len(result):
         raise InvalidEvent(f"{name} may not contain duplicates")
     return result
+
+
+def instant(value: Any, name: str) -> datetime:
+    """`value` as a moment in time: an ISO 8601 string that names its UTC offset.
+
+    A timestamp with no offset is refused, because whether a window is open depends on whose
+    midnight it means."""
+    if not isinstance(value, str) or not value.strip():
+        raise InvalidEvent(f"{name} must be an ISO 8601 timestamp string")
+    try:
+        moment = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise InvalidEvent(f"{name} is not an ISO 8601 timestamp: {value!r}") from exc
+    if moment.tzinfo is None or moment.utcoffset() is None:
+        raise InvalidEvent(f"{name} must state its UTC offset: {value!r}")
+    return moment
+
+
+def _check_window(valid_from: str | None, valid_until: str | None, label: str) -> None:
+    opens = instant(valid_from, "valid_from") if valid_from is not None else None
+    closes = instant(valid_until, "valid_until") if valid_until is not None else None
+    if opens is not None and closes is not None and not opens < closes:
+        raise InvalidEvent(f"{label} must open before it closes")
+
+
+class _Window:
+    """A half-open window, [`valid_from`, `valid_until`), on an authorization or a delegation."""
+
+    valid_from: str | None
+    valid_until: str | None
+
+    @property
+    def windowed(self) -> bool:
+        """Whether this holds only for a window."""
+        return self.valid_from is not None or self.valid_until is not None
+
+    def holds_at(self, moment: datetime) -> bool:
+        """Whether `moment` is inside the window."""
+        if self.valid_from is not None and moment < instant(self.valid_from, "valid_from"):
+            return False
+        if self.valid_until is not None and moment >= instant(self.valid_until, "valid_until"):
+            return False
+        return True
 
 
 def _jsonable(value: Any) -> Any:
@@ -103,7 +147,7 @@ class DeclaredChange:
 
 
 @dataclass(frozen=True)
-class AuthorizationEvent:
+class AuthorizationEvent(_Window):
     authorization_id: str
     authorized_by: Actor
     subject_id: str
@@ -113,6 +157,14 @@ class AuthorizationEvent:
     reason: str
     evidence_refs: tuple[str, ...] = field(default_factory=tuple)
     created_at: str = field(default_factory=utc_now)
+    #: The window this authorization holds for, half-open: from `valid_from` (inclusive) to `valid_until`
+    #: (exclusive). Either may be None for no bound; with neither it holds whenever it is consulted, as every
+    #: authorization did before windows. Judged against the deciding kernel's clock, never `created_at`.
+    valid_from: str | None = None
+    valid_until: str | None = None
+    #: The delegation this was issued under, when its author holds the power to authorize by delegation rather than
+    #: by being trusted directly. It counts only while every link of that delegation's chain is in force and covers it.
+    under_delegation: str | None = None
 
     def __post_init__(self) -> None:
         if not self.authorization_id.strip():
@@ -132,6 +184,10 @@ class AuthorizationEvent:
             json.dumps(self.to_value, sort_keys=True)
         except (TypeError, ValueError) as exc:
             raise InvalidEvent("authorization values must be JSON serializable") from exc
+        _check_window(self.valid_from, self.valid_until, f"authorization {self.authorization_id}")
+        if self.under_delegation is not None and (not isinstance(self.under_delegation, str)
+                                                  or not self.under_delegation.strip()):
+            raise InvalidEvent("under_delegation must be a delegation id or None")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -144,6 +200,10 @@ class AuthorizationEvent:
             "reason": self.reason,
             "evidence_refs": list(self.evidence_refs),
             "created_at": self.created_at,
+            # Present only when set, so an open-ended authorization (and every digest over it) keeps its old shape.
+            **({"valid_from": self.valid_from} if self.valid_from is not None else {}),
+            **({"valid_until": self.valid_until} if self.valid_until is not None else {}),
+            **({"under_delegation": self.under_delegation} if self.under_delegation is not None else {}),
         }
 
     @classmethod
@@ -161,6 +221,164 @@ class AuthorizationEvent:
             to_value=data["to_value"],
             reason=data["reason"],
             evidence_refs=data["evidence_refs"],
+            created_at=data["created_at"],
+            valid_from=data.get("valid_from"),
+            valid_until=data.get("valid_until"),
+            under_delegation=data.get("under_delegation"),
+        )
+
+
+@dataclass(frozen=True)
+class DelegationEvent(_Window):
+    """A human letting a named delegate issue authorizations, within a stated scope.
+
+    The scope is three explicit lists: the subjects (by id, one by one; there is no pattern or wildcard), the kinds
+    of change, and the target values an authorization under it may carry. It holds for its own window and until it
+    is revoked (a `RevocationEvent` naming its `delegation_id`). The delegate may pass on part of it only if
+    `may_redelegate` is set; the child names this one as `parent_delegation_id`, must be issued by this one's
+    delegate, and may only narrow the scope. The chain must start at a human the registry trusts."""
+
+    delegation_id: str
+    delegator: Actor
+    delegate_id: str
+    subject_ids: tuple[str, ...]
+    transition_kinds: tuple[TransitionKind, ...]
+    to_values: tuple[Any, ...]
+    reason: str
+    parent_delegation_id: str | None = None
+    may_redelegate: bool = False
+    valid_from: str | None = None
+    valid_until: str | None = None
+    created_at: str = field(default_factory=utc_now)
+
+    def __post_init__(self) -> None:
+        for name in ("delegation_id", "delegate_id", "reason"):
+            if not isinstance(getattr(self, name), str) or not getattr(self, name).strip():
+                raise InvalidEvent(f"delegation requires {name}")
+        if not isinstance(self.delegator, Actor):
+            raise InvalidEvent("delegation requires a delegator Actor")
+        if self.delegator.kind is not ActorKind.HUMAN:
+            raise InvalidEvent("only a human actor can delegate the power to authorize")
+        if self.delegate_id == self.delegator.actor_id:
+            raise InvalidEvent("a delegation must be to someone else")
+        object.__setattr__(self, "subject_ids", _tuple(self.subject_ids, "delegation subject_ids"))
+        if isinstance(self.transition_kinds, (str, bytes)):
+            raise InvalidEvent("delegation transition_kinds must be a sequence")
+        object.__setattr__(self, "transition_kinds", tuple(_enum(kind, TransitionKind) for kind in self.transition_kinds))
+        if isinstance(self.to_values, (str, bytes)):
+            raise InvalidEvent("delegation to_values must be a sequence")
+        object.__setattr__(self, "to_values", tuple(_jsonable(value) for value in self.to_values))
+        for name in ("subject_ids", "transition_kinds", "to_values"):
+            if not getattr(self, name):
+                raise InvalidEvent(f"a delegation must name at least one of its {name}; it has no open-ended scope")
+        try:
+            json.dumps(list(self.to_values), sort_keys=True)
+        except (TypeError, ValueError) as exc:
+            raise InvalidEvent("delegation to_values must be JSON serializable") from exc
+        if self.parent_delegation_id is not None and (not isinstance(self.parent_delegation_id, str)
+                                                      or not self.parent_delegation_id.strip()):
+            raise InvalidEvent("parent_delegation_id must be a delegation id or None")
+        if not isinstance(self.may_redelegate, bool):
+            raise InvalidEvent("may_redelegate must be true or false")
+        _check_window(self.valid_from, self.valid_until, f"delegation {self.delegation_id}")
+
+    def covers(self, subject_id: str, transition_kind: TransitionKind, to_value: Any) -> bool:
+        """Whether an authorization of this change falls inside this delegation's scope."""
+        return (subject_id in self.subject_ids and transition_kind in self.transition_kinds
+                and to_value in self.to_values)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "delegation_id": self.delegation_id,
+            "delegator": self.delegator.to_dict(),
+            "delegate_id": self.delegate_id,
+            "subject_ids": list(self.subject_ids),
+            "transition_kinds": [kind.value for kind in self.transition_kinds],
+            "to_values": list(self.to_values),
+            "reason": self.reason,
+            "parent_delegation_id": self.parent_delegation_id,
+            "may_redelegate": self.may_redelegate,
+            "valid_from": self.valid_from,
+            "valid_until": self.valid_until,
+            "created_at": self.created_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "DelegationEvent":
+        required = ("delegation_id", "delegator", "delegate_id", "subject_ids", "transition_kinds", "to_values",
+                    "reason", "parent_delegation_id", "may_redelegate", "valid_from", "valid_until", "created_at")
+        for name in required:
+            if name not in data:
+                raise InvalidEvent(f"delegation missing required field {name!r}")
+        return cls(
+            delegation_id=data["delegation_id"],
+            delegator=Actor.from_dict(data["delegator"]),
+            delegate_id=data["delegate_id"],
+            subject_ids=data["subject_ids"],
+            transition_kinds=data["transition_kinds"],
+            to_values=data["to_values"],
+            reason=data["reason"],
+            parent_delegation_id=data["parent_delegation_id"],
+            may_redelegate=data["may_redelegate"],
+            valid_from=data["valid_from"],
+            valid_until=data["valid_until"],
+            created_at=data["created_at"],
+        )
+
+
+@dataclass(frozen=True)
+class RevocationEvent:
+    """A human ending an authorization, or a delegation (`authorization_id` names either), from a moment forward.
+
+    It takes effect when the deciding kernel records it, or at the later `effective_at` if one is given, and from
+    then on the authorization it names does not count. It never reaches back: `EvidenceRegistry.add_revocation`
+    refuses one whose `effective_at` is before the moment it is recorded, so a decision made while the
+    authorization held stays valid and still re-verifies. Any human the registry trusts may revoke: ending an
+    authorization can only take power away."""
+
+    revocation_id: str
+    authorization_id: str
+    revoked_by: Actor
+    reason: str
+    effective_at: str | None = None
+    created_at: str = field(default_factory=utc_now)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.revocation_id, str) or not self.revocation_id.strip():
+            raise InvalidEvent("revocation requires revocation_id")
+        if not isinstance(self.authorization_id, str) or not self.authorization_id.strip():
+            raise InvalidEvent("revocation requires the authorization_id it ends")
+        if not isinstance(self.revoked_by, Actor):
+            raise InvalidEvent("revocation requires an Actor")
+        if self.revoked_by.kind is not ActorKind.HUMAN:
+            raise InvalidEvent("only a human actor can revoke an authorization")
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise InvalidEvent("revocation requires a reason")
+        if self.effective_at is not None:
+            instant(self.effective_at, "effective_at")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "revocation_id": self.revocation_id,
+            "authorization_id": self.authorization_id,
+            "revoked_by": self.revoked_by.to_dict(),
+            "reason": self.reason,
+            "effective_at": self.effective_at,
+            "created_at": self.created_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "RevocationEvent":
+        required = ("revocation_id", "authorization_id", "revoked_by", "reason", "effective_at", "created_at")
+        for name in required:
+            if name not in data:
+                raise InvalidEvent(f"revocation missing required field {name!r}")
+        return cls(
+            revocation_id=data["revocation_id"],
+            authorization_id=data["authorization_id"],
+            revoked_by=Actor.from_dict(data["revoked_by"]),
+            reason=data["reason"],
+            effective_at=data["effective_at"],
             created_at=data["created_at"],
         )
 

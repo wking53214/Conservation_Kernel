@@ -43,6 +43,7 @@ INPUT ARTIFACT + DECLARED CHANGE + OBSERVED EFFECTS + EVIDENCE/AUTH REGISTRY
 - **`IndependentVerifier`**: recomputes observed changes; **never trusts the declaration string**. Undeclared shifts → REJECT.
 - **`EvidenceRegistry`**: external witness. Source-reference changes require a registered source observation.
 - **`AuthorizationEvent`**: checked, not issued. If the transformer can write the authorization registry, independence is gone (`docs/LIMITATIONS.md`).
+- **Authorization lifecycle**: an authorization may hold for a window (`valid_from`, `valid_until`), be ended by a `RevocationEvent` from a moment forward (never backward), or be issued under a `DelegationEvent` that lets a named delegate authorize listed subjects, kinds of change and target values (re-delegation only narrower, at most 3 links). All of it is judged as of the kernel's clock (`ConservationKernel(clock=...)`), stamped on every decision and root admission, so a restore re-verifies history as of when it was decided. `EvidenceRegistry(require_bounded=True)` refuses anything open-ended.
 - **`ConservationLedger`**: append-only **by API**, in-memory. SHA-256 detects inconsistency on recompute; it is not a tamper-proof durable store.
 - **`ConservationKernel` façade**: `register_root` → `submit` → `reconstruct`. Root admission and born-authoritative rules exist (0.2.0+). Signed snapshots in 0.3.0 (`signing.py`).
 - **Hostile corpus** (`experiments.py`, numbered `test_attack_0*.py`): cross-subject authorization, recursive self-verification, provenance forgery, evidence-subject binding, human-origin reclassification, evidence deactivation.
@@ -52,7 +53,7 @@ Natural-language semantic equivalence is **unverifiable** when content changes. 
 ## 3. What It Does NOT Do / Non-Goals
 
 - Does **not** judge truth, usefulness, or policy permission.
-- Does **not** issue authorization or manage grant lifecycle.
+- Does **not** issue authorization. It enforces the lifecycle of what is registered (windows, revocation, delegation scope); it does not decide who should hold a grant.
 - Does **not** execute.
 - Does **not** provide KMS/HSM, authenticity, or non-repudiation (HMAC/signatures in 0.3.0 are snapshot authenticity for a deployed key, not a grant protocol).
 - Does **not** crypto-shred. Canonical fields are hashed in the clear.
@@ -64,6 +65,7 @@ Natural-language semantic equivalence is **unverifiable** when content changes. 
 |---|---|
 | In-memory ledger | Durable custody is sentinel_os / observe-perceive JSONL, not this package. |
 | Trust boundary | Registry independence is a **deployment** property. Nothing stops a caller from stuffing HUMAN_AUTHORIZED events. |
+| Clock | Windows and revocations are only as good as the clock handed to the kernel. A deployment should hand in its ledger's clock. A stale registry snapshot still honours a since-revoked grant. |
 | NL equivalence | Explicitly unverified. |
 | Vocab drift | Gateway epistemic enum ≠ this enum. Adapters must map. |
 | Pinned by consumers | observe-perceive and sentinel_os pin `25145aa`. Do not "fix" the default branch without re-running those suites. |

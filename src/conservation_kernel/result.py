@@ -60,6 +60,10 @@ class VerificationResult:
     violations: tuple[Violation, ...] = field(default_factory=tuple)
     unverifiable_properties: tuple[str, ...] = field(default_factory=tuple)
     checked_dimensions: tuple[Dimension, ...] = field(default_factory=tuple)
+    #: When the deciding kernel judged this, by its own clock (ISO 8601 with offset). None when the verifier
+    #: was called without a time. Authorizations that expire or can be revoked are judged as of this moment,
+    #: and a restore re-verifies as of it, so history is not re-judged against a later day.
+    verified_at: str | None = None
 
     @property
     def accepted(self) -> bool:
@@ -75,6 +79,8 @@ class VerificationResult:
             "violations": [item.to_dict() for item in self.violations],
             "unverifiable_properties": list(self.unverifiable_properties),
             "checked_dimensions": [item.value for item in self.checked_dimensions],
+            # Present only when stamped, so a result's shape (and every digest over it) is unchanged without one.
+            **({"verified_at": self.verified_at} if self.verified_at is not None else {}),
         }
 
     @classmethod
@@ -88,4 +94,5 @@ class VerificationResult:
             violations=tuple(Violation.from_dict(item) for item in data.get("violations", [])),
             unverifiable_properties=tuple(data.get("unverifiable_properties", [])),
             checked_dimensions=tuple(Dimension(item) for item in data.get("checked_dimensions", [])),
+            verified_at=data.get("verified_at"),
         )

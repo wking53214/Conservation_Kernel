@@ -7,9 +7,9 @@ from collections.abc import Callable, Sequence
 from .enums import AuthorityStatus, CanonicalState, EpistemicStatus, TransitionKind
 from .errors import (LedgerError, RootAdmissionError, SnapshotAuthenticityError, SnapshotIntegrityError,
                      UnguardedKernelError)
-from .events import TransformationRecord
+from .events import RevocationEvent, TransformationRecord, instant
 from .ledger import ConservationLedger
-from .model import Artifact, _digest, canonical_json
+from .model import Artifact, _digest, canonical_json, utc_now
 from .reconstruction import Reconstruction, ReconstructionEngine
 from .registry import EvidenceRegistry
 from .result import VerificationResult
@@ -34,8 +34,13 @@ class ConservationKernel:
         ledger: ConservationLedger | None = None,
         root_guard: Callable[[Artifact], bool] | None = None,
         allow_unguarded_roots: bool = False,
+        clock: Callable[[], str] | None = None,
     ) -> None:
-        """`root_guard` makes registering a root depend on a permission the caller holds: the ledger asks it
+        """`clock` returns the time the kernel decides at (ISO 8601 with offset). Every decision and root admission
+        is stamped with it and judged as of it. It defaults to this machine's UTC clock; a deployment should hand in
+        the clock of the ledger it writes to, since a time-limited authorization is only as good as that time.
+
+        `root_guard` makes registering a root depend on a permission the caller holds: the ledger asks it
         before adding any initial artifact, whether through `register_root` or `ledger.add_initial`. To guard a
         ledger you pass in, build it with `ConservationLedger(root_guard=...)`.
 
@@ -46,6 +51,7 @@ class ConservationKernel:
         if root_guard is not None and ledger is not None:
             raise ValueError("pass the root guard to the ledger you supply, not to the kernel as well")
         self.registry = registry or EvidenceRegistry()
+        self.clock = clock or utc_now
         self.verifier = verifier or IndependentVerifier()
         self.ledger = ledger or ConservationLedger(root_guard=root_guard)
         if not self.ledger.has_root_guard and not allow_unguarded_roots:
@@ -67,7 +73,7 @@ class ConservationKernel:
     CANONICAL_STATES = frozenset({CanonicalState.ACCEPTED, CanonicalState.CANONICAL, CanonicalState.SUPERSEDED,
                                   CanonicalState.REVOKED, CanonicalState.DELETED})
 
-    def admit_root(self, artifact: Artifact) -> tuple[str, ...]:
+    def admit_root(self, artifact: Artifact, *, as_of: str | None = None) -> tuple[str, ...]:
         """Reasons this artifact may not be registered as a root; empty if it may.
 
         The constitution constrains transitions, so a root is asserted. But an
@@ -76,7 +82,10 @@ class ConservationKernel:
         authorization for that proposition, a fact with no evidence, or an
         observation with no source, is a forged origin story, and everything derived from it would inherit
         verified ancestry it never had.
+
+        Authorizations are judged as of `as_of`, or as of the kernel's clock now when it is not given.
         """
+        registry = self.registry.at(as_of if as_of is not None else self._now())
         reasons: list[str] = []
         for prop in artifact.propositions:
             missing = self.registry.missing_refs(prop.evidence_refs)
@@ -86,10 +95,12 @@ class ConservationKernel:
             if dangling:
                 reasons.append(f"{prop.proposition_id}: authorization_refs not in registry: {list(dangling)}")
             if prop.authority in self.AUTHORITATIVE and not self._authorized(
-                    prop.authorization_refs, prop.proposition_id, TransitionKind.AUTHORITY_ESCALATION, prop.authority.value):
+                    prop.authorization_refs, prop.proposition_id, TransitionKind.AUTHORITY_ESCALATION, prop.authority.value,
+                    registry=registry):
                 reasons.append(f"{prop.proposition_id}: authority {prop.authority.value} has no authorization for this proposition")
             if prop.canonical_state in self.CANONICAL_STATES and not self._authorized(
-                    prop.authorization_refs, prop.proposition_id, TransitionKind.CANONICALIZATION, prop.canonical_state.value):
+                    prop.authorization_refs, prop.proposition_id, TransitionKind.CANONICALIZATION, prop.canonical_state.value,
+                    registry=registry):
                 reasons.append(f"{prop.proposition_id}: canonical state {prop.canonical_state.value} has no canonicalization for this proposition")
             if prop.epistemic_status in self.STRONG_EPISTEMIC and not (prop.source_refs or prop.evidence_refs):
                 reasons.append(f"{prop.proposition_id}: a root {prop.epistemic_status.value} must cite a source or evidence")
@@ -98,20 +109,32 @@ class ConservationKernel:
                                "a source alone supports an OBSERVATION or an INFERENCE, not a FACT")
         return tuple(reasons)
 
-    def _authorized(self, refs, subject_id: str, kind: TransitionKind, to_value: str) -> bool:
+    def _now(self) -> str:
+        """The kernel's clock, refused unless it is a time this kernel can judge by."""
+        moment = self.clock()
+        instant(moment, "clock")
+        return moment
+
+    def _authorized(self, refs, subject_id: str, kind: TransitionKind, to_value: str, *, registry=None) -> bool:
+        registry = registry if registry is not None else self.registry.at(self._now())
         for ref in refs:
-            event = self.registry.authorization(ref)
+            event = registry.authorization(ref)
             if event is None:
                 continue
             if event.subject_id == subject_id and event.transition_kind is kind and event.to_value == to_value:
                 return True
         return False
 
+    def revoke(self, event: RevocationEvent) -> None:
+        """Record a revocation as of this kernel's clock (see `EvidenceRegistry.add_revocation`)."""
+        self.registry.add_revocation(event, recorded_at=self._now())
+
     def register_root(self, artifact: Artifact) -> None:
-        reasons = self.admit_root(artifact)
+        as_of = self._now()
+        reasons = self.admit_root(artifact, as_of=as_of)
         if reasons:
             raise RootAdmissionError("root refused: " + "; ".join(reasons))
-        self.ledger.add_initial(artifact)
+        self.ledger.add_initial(artifact, admitted_at=as_of)
 
     def submit(
         self,
@@ -119,7 +142,7 @@ class ConservationKernel:
         output: Artifact,
         record: TransformationRecord,
     ) -> VerificationResult:
-        result = self.verifier.verify(input_artifacts, output, record, self.registry)
+        result = self.verifier.verify(input_artifacts, output, record, self.registry.at(self._now()))
         if result.accepted:
             try:
                 self.ledger.commit(output, record, result)
@@ -156,7 +179,9 @@ class ConservationKernel:
     @classmethod
     def from_snapshot(cls, snapshot: dict, *, trusted_humans=None, reverify: bool = True, signer=None,
                       root_guard: Callable[[Artifact], bool] | None = None,
-                      allow_unguarded_roots: bool = False) -> "ConservationKernel":
+                      allow_unguarded_roots: bool = False,
+                      clock: Callable[[], str] | None = None,
+                      require_bounded: bool = False) -> "ConservationKernel":
         """A kernel continuing from `snapshot()`.
 
         The digest is checked first (corruption). Then, with `reverify`, every
@@ -180,18 +205,28 @@ class ConservationKernel:
             problem = check_signature(signer, recorded or "", signature)
             if problem:
                 raise SnapshotAuthenticityError(f"snapshot not authenticated: {problem}")
-        registry = EvidenceRegistry.restore(body.get("registry", {}), trusted_humans=trusted_humans)
+        registry = EvidenceRegistry.restore(body.get("registry", {}), trusted_humans=trusted_humans,
+                                            require_bounded=require_bounded)
         ledger = ConservationLedger.restore(body.get("ledger", {}), root_guard=root_guard)
-        kernel = cls(registry=registry, ledger=ledger, allow_unguarded_roots=allow_unguarded_roots)
+        kernel = cls(registry=registry, ledger=ledger, allow_unguarded_roots=allow_unguarded_roots, clock=clock)
         if reverify:
             kernel.reverify()
         return kernel
 
     def reverify(self) -> None:
-        """Re-admit every root and re-verify every transformation now in the ledger."""
+        """Re-admit every root and re-verify every transformation now in the ledger, each as of when it was first
+        accepted. One recorded without a time (written before times existed, or straight to the ledger) is judged as
+        of now and given that time, once, so a revocation recorded later cannot reach back over it. A recorded time
+        that is unreadable or later than now is refused: no decision can have been made in the future."""
+        now = self._now()
+        unstamped_roots: dict[str, str] = {}
+        unstamped_transformations: dict[str, str] = {}
         for artifact in self.ledger.artifacts():
             if not artifact.parent_artifact_ids:
-                reasons = self.admit_root(artifact)
+                as_of = self._recorded(self.ledger.admitted_at(artifact.artifact_id), now, f"root {artifact.artifact_id}")
+                if self.ledger.admitted_at(artifact.artifact_id) is None:
+                    unstamped_roots[artifact.artifact_id] = as_of
+                reasons = self.admit_root(artifact, as_of=as_of)
                 if reasons:
                     raise SnapshotIntegrityError(f"root {artifact.artifact_id} would not be admitted: " + "; ".join(reasons))
         for record in self.ledger.transformations():
@@ -200,12 +235,30 @@ class ConservationKernel:
                 output = self.ledger.artifact(record.output_artifact_id)
             except KeyError as e:
                 raise SnapshotIntegrityError(f"transformation {record.transformation_id} references an artifact not in the ledger: {e}") from e
-            result = self.verifier.verify(inputs, output, record, self.registry)
+            stamp = self.ledger.verified_at(record.transformation_id)
+            as_of = self._recorded(stamp, now, f"transformation {record.transformation_id}")
+            if stamp is None:
+                unstamped_transformations[record.transformation_id] = as_of
+            result = self.verifier.verify(inputs, output, record, self.registry.at(as_of))
             if not result.accepted:
                 raise SnapshotIntegrityError(
                     f"transformation {record.transformation_id} does not re-verify: "
                     + "; ".join(f"{v.code}" for v in result.violations)
                 )
+        self.ledger.record_times(admitted=unstamped_roots, verified=unstamped_transformations)
+
+    @staticmethod
+    def _recorded(stamp: str | None, now: str, what: str) -> str:
+        """The time to re-judge `what` at: its recorded time, checked, or `now` when it has none."""
+        if stamp is None:
+            return now
+        try:
+            moment = instant(stamp, "recorded time")
+        except Exception as exc:
+            raise SnapshotIntegrityError(f"{what} carries an unreadable time {stamp!r}") from exc
+        if moment > instant(now, "clock"):
+            raise SnapshotIntegrityError(f"{what} is recorded at {stamp}, in the future of this kernel's clock ({now})")
+        return stamp
 
     def save(self, path, *, signer=None) -> None:
         """Write the snapshot; with a signer, sign its digest with the deployer's key."""

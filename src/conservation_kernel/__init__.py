@@ -21,7 +21,9 @@ from .enums import (
 from .events import (
     AuthorizationEvent,
     DeclaredChange,
+    DelegationEvent,
     EvidenceRecord,
+    RevocationEvent,
     TransformationRecord,
 )
 from .ledger import ConservationLedger
@@ -46,6 +48,7 @@ __all__ = [
     "ConservationLedger",
     "ConservationKernel",
     "DeclaredChange",
+    "DelegationEvent",
     "Dimension",
     "EpistemicStatus",
     "EvidenceKind",
@@ -56,6 +59,7 @@ __all__ = [
     "ObservedChange",
     "OriginStatus",
     "Proposition",
+    "RevocationEvent",
     "TemporalMetadata",
     "TemporalScope",
     "TransformationRecord",

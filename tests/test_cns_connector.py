@@ -190,8 +190,13 @@ def _pinned_candidate():
     return TransformationCandidate(source, output, record)
 
 
+def _same_clock():
+    # The kernel stamps each decision with its clock; twins compared for equality share one.
+    return "2026-10-01T00:00:00+00:00"
+
+
 def _twin(base, registry):
-    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry)
+    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=_same_clock)
     kernel.register_root(base)
     return kernel
 
@@ -421,8 +426,8 @@ def test_submit_to_cns_lets_a_kernel_error_that_is_not_a_ledger_refusal_propagat
 def test_an_unregistered_parent_is_a_terminal_breach_not_a_raise():
     base, registry = build_ground_truth()
     output, record = legitimate_transformation(base, 1)
-    native_kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry)
-    connected_kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry)
+    native_kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=_same_clock)
+    connected_kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=_same_clock)
     with pytest.raises(LedgerError, match="not in the ledger"):
         native_kernel.submit(base, output, record)
     verdict = submit_to_cns(connected_kernel, base, output, record)
