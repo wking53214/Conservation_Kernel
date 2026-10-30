@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- The kernel stamps when it decided. `ConservationKernel(clock=...)` (default:
+  this machine's UTC clock) supplies the time of every decision and root
+  admission; `VerificationResult.verified_at` and the ledger's
+  `admitted_at` / `verified_at` keep it, snapshots carry it, and a restore
+  re-verifies each transformation and re-admits each root as of its stamp. The
+  kernel hands the verifier `registry.at(time)`, a time-bound view, so a
+  verifier with the old four-argument `verify` still works. Unstamped results
+  and ledgers keep their old shape.
+- `AuthorizationEvent(valid_from=..., valid_until=...)`: an authorization can
+  hold for a half-open window (ISO 8601 with a UTC offset). Outside it, or with
+  no time to judge by, it does not count. An open-ended one behaves as before.
+- `RevocationEvent` and `ConservationKernel.revoke()`: a human the registry
+  trusts ends an authorization or delegation from when it is recorded, or a
+  later `effective_at`. A revocation dated before it was recorded is refused.
+- `DelegationEvent`: a trusted human lets a named delegate issue
+  authorizations (`under_delegation`) for listed subjects, kinds of change and
+  target values, within a window and until revoked. Re-delegation only if
+  allowed, only narrower, at most `MAX_DELEGATION_DEPTH` (3) links; revoking a
+  link cuts off everything beneath it.
+- `EvidenceRegistry(require_bounded=True)` (default off) refuses an
+  authorization or delegation with no end, live and on restore.
 - A root `FACT` must cite evidence in the registry (`evidence_refs`). A source
   alone no longer admits a FACT: it supports an `OBSERVATION` or an
   `INFERENCE`. An `OBSERVATION` root still needs only a source or evidence.
