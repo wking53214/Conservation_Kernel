@@ -20,7 +20,7 @@ from .enums import (
 from .events import TransformationRecord
 from .model import Artifact, Proposition, canonical_json
 from .registry import EvidenceRegistry, RegistryAt
-from .result import ObservedChange, VerificationResult, Violation
+from .result import ObservedChange, VerificationResult, Violation, _issue_proof
 
 
 AUTHORITY_ORDER = {
@@ -232,7 +232,7 @@ class IndependentVerifier:
         else:
             status = VerificationStatus.PASS
 
-        return VerificationResult(
+        return _issue_proof(VerificationResult(
             transformation_id=record.transformation_id,
             input_artifact_ids=tuple(item.artifact_id for item in inputs),
             output_artifact_id=output.artifact_id,
@@ -242,7 +242,7 @@ class IndependentVerifier:
             unverifiable_properties=tuple(dict.fromkeys(unknown)),
             checked_dimensions=tuple(Dimension),
             verified_at=as_of,
-        )
+        ), record, output, getattr(registry, "issuer", None))
 
     def _check_evidence_refs(self, proposition: Proposition, refs: tuple[str, ...], registry: EvidenceRegistry, violation) -> None:
         missing = registry.missing_refs(refs)

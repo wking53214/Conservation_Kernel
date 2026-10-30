@@ -89,7 +89,7 @@ Measured 2026-10-30 at main `7233ab6`.
 | Door | Protection today |
 |---|---|
 | `register_root` and `ledger.add_initial` | The root guard. A kernel refuses to be built without one unless `allow_unguarded_roots=True` says so. The guard answers only `True` to permit. |
-| `ledger.commit` | A bookkeeping step after a result says accepted. It is not a permission check: a result is a plain object the caller can write. |
+| `ledger.commit` | Takes only a result the verifier produced for this record and output (`VerificationResult.proof`); a result written by hand, or edited after verification, is refused. A ledger a kernel owns also refuses one reached against any registry but that kernel's. |
 | `ConservationKernel.submit` | The verifier decides. Any caller may submit. |
 | `registry.add_authorization`, `add_delegation`, `revoke` | Only from a human in `trusted_humans`, when the deployer sets that. With it unset, any actor id is accepted. |
 | `registry.add_evidence` | Optional. With `evidence_guard` on the registry (or on the kernel that builds it), a record is added only if the guard answers exactly `True`; a raise or any other answer refuses and leaves the registry unchanged. A duplicate id is refused before the guard is asked, and evidence restored from a snapshot is not put to it. With no guard, any caller can add active evidence that declares itself independent, as before. |

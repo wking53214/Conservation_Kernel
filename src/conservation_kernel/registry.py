@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from collections.abc import Callable
 
 from .errors import InvalidEvent
@@ -41,6 +42,9 @@ class EvidenceRegistry:
         # stops holding (`valid_until`). An open-ended one is refused, live and on restore.
         self.require_bounded = require_bounded
         self._evidence_guard = evidence_guard
+        # Names this registry in the proof on a verification result, so a verdict reached against some other registry
+        # cannot be passed off as this one's. Random per instance and never written to a snapshot.
+        self._issuer = secrets.token_hex(16)
         self._evidence: dict[str, EvidenceRecord] = {}
         self._authorizations: dict[str, AuthorizationEvent] = {}
         self._delegations: dict[str, DelegationEvent] = {}
@@ -52,6 +56,11 @@ class EvidenceRegistry:
     def has_evidence_guard(self) -> bool:
         """Whether adding evidence depends on a guard. Says nothing about what the guard will answer."""
         return self._evidence_guard is not None
+
+    @property
+    def issuer(self) -> str:
+        """The name this registry puts on the verdicts reached against it (see `VerificationResult.proof`)."""
+        return self._issuer
 
     def add_evidence(self, record: EvidenceRecord) -> None:
         if record.evidence_id in self._evidence:
@@ -323,6 +332,10 @@ class RegistryAt:
     @property
     def require_bounded(self) -> bool:
         return self.registry.require_bounded
+
+    @property
+    def issuer(self) -> str:
+        return self.registry.issuer
 
     def snapshot(self) -> dict:
         return self.registry.snapshot()

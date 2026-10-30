@@ -70,14 +70,15 @@ def test_the_door_for_roots_still_works_and_still_asks_the_guard():
     assert shut.ledger.artifacts() == ()
 
 
-def test_a_child_of_a_registered_root_still_commits_through_the_ledger():
+def test_a_child_of_a_registered_root_cannot_commit_on_a_hand_written_result():
     ledger = ConservationLedger(root_guard=lambda artifact: True)
     ledger.add_initial(root("parent-1"))
     child = Artifact("child-1", "x", root("c").propositions, BOT, parent_artifact_ids=("parent-1",))
     record = TransformationRecord("t-2", ("parent-1",), "child-1", BOT, "x", (), ("h",), "h")
     result = VerificationResult("t-2", ("parent-1",), "child-1", VerificationStatus.PASS)
-    ledger.commit(child, record, result)
-    assert [a.artifact_id for a in ledger.artifacts()] == ["parent-1", "child-1"]
+    with pytest.raises(LedgerError, match="not produced by the verifier"):
+        ledger.commit(child, record, result)
+    assert [a.artifact_id for a in ledger.artifacts()] == ["parent-1"]
 
 
 def test_the_kernels_own_submit_with_no_inputs_is_still_rejected_and_adds_nothing():

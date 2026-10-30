@@ -68,6 +68,7 @@ class ConservationKernel:
                 "approved decision required. Pass root_guard=..., or allow_unguarded_roots=True if that is "
                 "deliberate."
             )
+        self.ledger._bind(self.registry.issuer)
         self.reconstruction = ReconstructionEngine()
 
     @property

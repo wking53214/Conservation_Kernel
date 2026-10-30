@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- `ConservationLedger.commit` takes only a result the verifier produced. A result is a plain object a caller can write,
+  so a hand-built `PASS` used to commit a child the verifier rejects (an INFERENCE lifted to a canonical FACT on
+  authorization refs that do not exist). `IndependentVerifier.verify` now attaches a proof (`VerificationResult.proof`,
+  never serialized or compared) over the result, the record, the output and the registry it ran against. `commit`
+  refuses a result whose proof is missing or does not check, and a ledger a kernel owns also refuses one reached
+  against any other registry. The public path stays `ConservationKernel.submit`. A ledger no kernel owns takes any
+  verifier-produced result, and a custom verifier must return what `IndependentVerifier.verify` gives it, or `submit`
+  cannot commit its results.
 - `CnsRootAdmissionGate(kernel, require_evidence_guard=True)` refuses (`TERMINAL_BREACH`) a kernel built without an
   evidence guard, the way `require_guard=True` does for the root guard, so a roster that issues approvals can insist
   the kernel's registry will not take evidence from just any caller. Default `False`: the gate judges exactly as

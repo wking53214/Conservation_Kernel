@@ -7,7 +7,7 @@ from collections.abc import Callable
 from .errors import LedgerError, RootAdmissionError
 from .events import TransformationRecord
 from .model import Artifact
-from .result import VerificationResult
+from .result import VerificationResult, _proof_issuer
 
 
 class ConservationLedger:
@@ -31,6 +31,16 @@ class ConservationLedger:
         # history written before times existed), never from a later attempt that the ledger refused.
         self._admitted_at: dict[str, str] = {}
         self._verified_at: dict[str, str] = {}
+        # The registry of the kernel that owns this ledger, once one does (`_bind`). A ledger with no kernel has no
+        # registry of its own to hold a verdict against, so it takes any result the verifier produced.
+        self._issuer: str | None = None
+
+    def _bind(self, issuer: str) -> None:
+        """Called by the kernel that takes this ledger: from now on `commit` takes only a result the verifier produced
+        against that kernel's registry."""
+        if self._issuer is not None and self._issuer != issuer:
+            raise LedgerError("this ledger already belongs to a kernel with another registry")
+        self._issuer = issuer
 
     @property
     def has_root_guard(self) -> bool:
@@ -98,6 +108,14 @@ class ConservationLedger:
                 raise LedgerError(f"parent artifact {parent} is not in the ledger")
         if record.transformation_id in self._transformations:
             raise LedgerError(f"duplicate transformation ID {record.transformation_id}")
+        # A result is a plain object a caller can write by hand, so PASS alone proves nothing. Only a result the
+        # verifier produced for exactly this record and output, against this ledger's kernel's registry, is taken.
+        issuer = _proof_issuer(result, record, output)
+        if issuer is None:
+            raise LedgerError("the result was not produced by the verifier for this record and output; "
+                              "transformations are submitted with ConservationKernel.submit")
+        if self._issuer is not None and issuer != self._issuer:
+            raise LedgerError("the result was verified against a registry other than this ledger's kernel's")
         self._add_artifact(output)
         self._transformations[record.transformation_id] = record
         self._reports.append(result)
