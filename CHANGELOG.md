@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `EvidenceRegistry(evidence_guard=...)` and `ConservationKernel(evidence_guard=...)`: an optional caller permission for
+  adding evidence, the way `root_guard` is for roots. The guard is asked with the record and permits only by answering
+  exactly `True`; a raise or any other answer refuses with `InvalidEvent` and leaves the registry unchanged. A
+  duplicate id is refused before the guard is asked, so a one-use permission is not spent on it. Evidence restored
+  from a snapshot is not put to the guard (`from_snapshot(..., evidence_guard=...)` guards what is added after).
+  `has_evidence_guard` says whether one is in place. With none, behaviour is exactly as before; passing a guard and a
+  registry to the kernel together is a `ValueError`, as it is for the root guard and a ledger.
 - The kernel stamps when it decided. `ConservationKernel(clock=...)` (default:
   this machine's UTC clock) supplies the time of every decision and root
   admission; `VerificationResult.verified_at` and the ledger's

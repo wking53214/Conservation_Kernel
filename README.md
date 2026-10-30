@@ -92,11 +92,11 @@ Measured 2026-10-30 at main `7233ab6`.
 | `ledger.commit` | A bookkeeping step after a result says accepted. It is not a permission check: a result is a plain object the caller can write. |
 | `ConservationKernel.submit` | The verifier decides. Any caller may submit. |
 | `registry.add_authorization`, `add_delegation`, `revoke` | Only from a human in `trusted_humans`, when the deployer sets that. With it unset, any actor id is accepted. |
-| `registry.add_evidence` | None. Any caller can add active evidence that declares itself independent. The registry is meant to be the deployer's protocol boundary. |
+| `registry.add_evidence` | Optional. With `evidence_guard` on the registry (or on the kernel that builds it), a record is added only if the guard answers exactly `True`; a raise or any other answer refuses and leaves the registry unchanged. A duplicate id is refused before the guard is asked, and evidence restored from a snapshot is not put to it. With no guard, any caller can add active evidence that declares itself independent, as before. |
 | `ledger.record_rejection`, `record_times` | None. A report can be added by any caller holding the ledger; times are set once and never replaced. |
 | `from_snapshot` and `load` | Digest check and re-verification; a signature only if the loader passes a signer. |
 
-Whether to give the unprotected doors a caller permission, as CCC has for its record-creating doors, is an open decision for the owner.
+Evidence is the first of the open doors to get an optional caller permission, because the verifier trusts evidence to approve strong claims. Whether `submit` and `ledger.record_rejection` should get one too is an open decision for the owner, and the CNS evidence spine does not yet pass an evidence guard.
 
 `python3 -m pytest -q` (hostile suite included). `PYTHONPATH=src python3 experiments/run_experiment.py` is a simulated control/treatment, **not** a population claim about LLMs.
 
