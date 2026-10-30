@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .errors import InvalidEvent
-from .events import AuthorizationEvent, EvidenceRecord
+from .events import AuthorizationEvent, EvidenceRecord, instant
 
 
 class EvidenceRegistry:
@@ -15,7 +15,8 @@ class EvidenceRegistry:
     boundary; this in-memory implementation makes that boundary testable.
     """
 
-    def __init__(self, *, trusted_humans: set[str] | frozenset[str] | None = None) -> None:
+    def __init__(self, *, trusted_humans: set[str] | frozenset[str] | None = None,
+                 require_bounded: bool = False) -> None:
         # ActorKind.HUMAN is a self-declaration on a caller-supplied dataclass:
         # a machine that constructs Actor("agent", kind=HUMAN) mints valid
         # human authorizations (measured 2026-09-08). The kernel cannot know
@@ -24,6 +25,9 @@ class EvidenceRegistry:
         # it is None the registry behaves as before, and that fact is the
         # trust assumption every downstream "human authorized" claim rests on.
         self.trusted_humans = frozenset(trusted_humans) if trusted_humans is not None else None
+        # Off by default, so nothing changes until a deployer asks: with it on, an authorization must say when it
+        # stops holding (`valid_until`). An open-ended one is refused, live and on restore.
+        self.require_bounded = require_bounded
         self._evidence: dict[str, EvidenceRecord] = {}
         self._authorizations: dict[str, AuthorizationEvent] = {}
 
@@ -38,6 +42,11 @@ class EvidenceRegistry:
                 f"authorization {event.authorization_id} is by {event.authorized_by.actor_id!r}, "
                 "which this registry does not recognise as a human authorizer"
             )
+        if self.require_bounded and event.valid_until is None:
+            raise InvalidEvent(
+                f"authorization {event.authorization_id} has no end (valid_until), and this registry accepts only "
+                "authorizations that stop holding at a stated time"
+            )
         if event.authorization_id in self._authorizations:
             raise InvalidEvent(f"duplicate authorization ID {event.authorization_id}")
         self._authorizations[event.authorization_id] = event
@@ -50,8 +59,20 @@ class EvidenceRegistry:
         return self._authorizations.get(authorization_id)
 
     def in_force(self, event: AuthorizationEvent, as_of: str | None) -> bool:
-        """Whether `event` may be relied on at `as_of`."""
-        return True
+        """Whether `event` may be relied on at `as_of`.
+
+        An open-ended authorization holds whenever it is consulted, as every authorization did before windows. A
+        windowed one holds only inside its window, and only if `as_of` is a time this can read: an unknown time
+        (None) or an unreadable one cannot show it is in force, so it does not count."""
+        if not event.windowed:
+            return True
+        if as_of is None:
+            return False
+        try:
+            moment = instant(as_of, "as_of")
+        except InvalidEvent:
+            return False
+        return event.holds_at(moment)
 
     def at(self, as_of: str | None) -> "RegistryAt":
         """This registry as of one moment: an authorization counts only if it is in force then.
@@ -121,11 +142,11 @@ class EvidenceRegistry:
         }
 
     @classmethod
-    def restore(cls, snapshot: dict, *, trusted_humans=None) -> "EvidenceRegistry":
+    def restore(cls, snapshot: dict, *, trusted_humans=None, require_bounded: bool = False) -> "EvidenceRegistry":
         """A registry rebuilt from `snapshot()`. Authorizations go through
-        add_authorization, so a trusted-humans binding is enforced on
-        restore as it was live."""
-        registry = cls(trusted_humans=trusted_humans)
+        add_authorization, so a trusted-humans binding and `require_bounded`
+        are enforced on restore as they were live."""
+        registry = cls(trusted_humans=trusted_humans, require_bounded=require_bounded)
         for item in snapshot.get("evidence", []):
             registry.add_evidence(EvidenceRecord.from_dict(item))
         for item in snapshot.get("authorizations", []):

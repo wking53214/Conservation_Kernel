@@ -168,7 +168,8 @@ class ConservationKernel:
     def from_snapshot(cls, snapshot: dict, *, trusted_humans=None, reverify: bool = True, signer=None,
                       root_guard: Callable[[Artifact], bool] | None = None,
                       allow_unguarded_roots: bool = False,
-                      clock: Callable[[], str] | None = None) -> "ConservationKernel":
+                      clock: Callable[[], str] | None = None,
+                      require_bounded: bool = False) -> "ConservationKernel":
         """A kernel continuing from `snapshot()`.
 
         The digest is checked first (corruption). Then, with `reverify`, every
@@ -192,7 +193,8 @@ class ConservationKernel:
             problem = check_signature(signer, recorded or "", signature)
             if problem:
                 raise SnapshotAuthenticityError(f"snapshot not authenticated: {problem}")
-        registry = EvidenceRegistry.restore(body.get("registry", {}), trusted_humans=trusted_humans)
+        registry = EvidenceRegistry.restore(body.get("registry", {}), trusted_humans=trusted_humans,
+                                            require_bounded=require_bounded)
         ledger = ConservationLedger.restore(body.get("ledger", {}), root_guard=root_guard)
         kernel = cls(registry=registry, ledger=ledger, allow_unguarded_roots=allow_unguarded_roots, clock=clock)
         if reverify:

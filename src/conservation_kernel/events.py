@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from datetime import datetime
 from types import MappingProxyType
 from typing import Any, Mapping
 
@@ -37,6 +38,22 @@ def _tuple(values: Any, name: str) -> tuple[str, ...]:
     if len(set(result)) != len(result):
         raise InvalidEvent(f"{name} may not contain duplicates")
     return result
+
+
+def instant(value: Any, name: str) -> datetime:
+    """`value` as a moment in time: an ISO 8601 string that names its UTC offset.
+
+    A timestamp with no offset is refused, because whether a window is open depends on whose
+    midnight it means."""
+    if not isinstance(value, str) or not value.strip():
+        raise InvalidEvent(f"{name} must be an ISO 8601 timestamp string")
+    try:
+        moment = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise InvalidEvent(f"{name} is not an ISO 8601 timestamp: {value!r}") from exc
+    if moment.tzinfo is None or moment.utcoffset() is None:
+        raise InvalidEvent(f"{name} must state its UTC offset: {value!r}")
+    return moment
 
 
 def _jsonable(value: Any) -> Any:
@@ -113,6 +130,11 @@ class AuthorizationEvent:
     reason: str
     evidence_refs: tuple[str, ...] = field(default_factory=tuple)
     created_at: str = field(default_factory=utc_now)
+    #: The window this authorization holds for, half-open: from `valid_from` (inclusive) to `valid_until`
+    #: (exclusive). Either may be None for no bound; with neither it holds whenever it is consulted, as every
+    #: authorization did before windows. Judged against the deciding kernel's clock, never `created_at`.
+    valid_from: str | None = None
+    valid_until: str | None = None
 
     def __post_init__(self) -> None:
         if not self.authorization_id.strip():
@@ -132,6 +154,23 @@ class AuthorizationEvent:
             json.dumps(self.to_value, sort_keys=True)
         except (TypeError, ValueError) as exc:
             raise InvalidEvent("authorization values must be JSON serializable") from exc
+        opens = instant(self.valid_from, "valid_from") if self.valid_from is not None else None
+        closes = instant(self.valid_until, "valid_until") if self.valid_until is not None else None
+        if opens is not None and closes is not None and not opens < closes:
+            raise InvalidEvent(f"authorization {self.authorization_id} must open before it closes")
+
+    @property
+    def windowed(self) -> bool:
+        """Whether this authorization holds only for a window (see `valid_from` and `valid_until`)."""
+        return self.valid_from is not None or self.valid_until is not None
+
+    def holds_at(self, moment: datetime) -> bool:
+        """Whether `moment` is inside this authorization's window."""
+        if self.valid_from is not None and moment < instant(self.valid_from, "valid_from"):
+            return False
+        if self.valid_until is not None and moment >= instant(self.valid_until, "valid_until"):
+            return False
+        return True
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -144,6 +183,9 @@ class AuthorizationEvent:
             "reason": self.reason,
             "evidence_refs": list(self.evidence_refs),
             "created_at": self.created_at,
+            # Present only when set, so an open-ended authorization (and every digest over it) keeps its old shape.
+            **({"valid_from": self.valid_from} if self.valid_from is not None else {}),
+            **({"valid_until": self.valid_until} if self.valid_until is not None else {}),
         }
 
     @classmethod
@@ -162,6 +204,8 @@ class AuthorizationEvent:
             reason=data["reason"],
             evidence_refs=data["evidence_refs"],
             created_at=data["created_at"],
+            valid_from=data.get("valid_from"),
+            valid_until=data.get("valid_until"),
         )
 
 
