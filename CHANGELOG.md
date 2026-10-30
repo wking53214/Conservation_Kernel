@@ -31,7 +31,8 @@
   adding evidence, the way `root_guard` is for roots. The guard is asked with the record and permits only by answering
   exactly `True`; a raise or any other answer refuses with `InvalidEvent` and leaves the registry unchanged. A
   duplicate id is refused before the guard is asked, so a one-use permission is not spent on it. Evidence restored
-  from a snapshot is not put to the guard (`from_snapshot(..., evidence_guard=...)` guards what is added after).
+  from a snapshot is put to the guard too: it is in place before the first record loads, and a record it refuses
+  refuses the whole restore, so a file cannot plant evidence the guard would have refused.
   `has_evidence_guard` says whether one is in place. With none, behaviour is exactly as before; passing a guard and a
   registry to the kernel together is a `ValueError`, as it is for the root guard and a ledger.
 - The kernel stamps when it decided. `ConservationKernel(clock=...)` (default:

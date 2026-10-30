@@ -29,8 +29,9 @@ class EvidenceRegistry:
         answers exactly True. It is the caller's own permission check (the kernel imports nothing to supply one); a
         guard that raises or answers anything else refuses, and a refused record leaves the registry as it was. It is
         asked after the registry has refused what it refuses itself (a duplicate id), so a one-use permission is not
-        spent on a record that could never go in. Rebuilding a registry from a snapshot does not ask it. With none
-        (the default) any caller may add evidence, as before."""
+        spent on a record that could never go in. Rebuilding a registry from a snapshot asks it about every restored
+        record too, so evidence planted in a file cannot load past a guard. With none (the default) any caller may add
+        evidence, as before."""
         # ActorKind.HUMAN is a self-declaration on a caller-supplied dataclass:
         # a machine that constructs Actor("agent", kind=HUMAN) mints valid
         # human authorizations (measured 2026-09-08). The kernel cannot know
@@ -318,10 +319,11 @@ class EvidenceRegistry:
                 require_content_bound: bool = False) -> "EvidenceRegistry":
         """A registry rebuilt from `snapshot()`. Authorizations go through
         add_authorization, so a trusted-humans binding and `require_bounded`
-        are enforced on restore as they were live. The evidence in the snapshot is not put to `evidence_guard`
-        (it was guarded, or not, when first added); the guard governs evidence added after."""
+        are enforced on restore as they were live. So is `evidence_guard`: it is in place before the first record is
+        added, and a record it does not authorize refuses the whole restore, so a file cannot plant evidence the
+        guard would have refused."""
         registry = cls(trusted_humans=trusted_humans, require_bounded=require_bounded,
-                       require_content_bound=require_content_bound)
+                       evidence_guard=evidence_guard, require_content_bound=require_content_bound)
         for item in snapshot.get("evidence", []):
             registry.add_evidence(EvidenceRecord.from_dict(item))
         for item in snapshot.get("delegations", []):             # before the authorizations that cite them
@@ -330,7 +332,6 @@ class EvidenceRegistry:
             registry.add_authorization(AuthorizationEvent.from_dict(item))
         for item in snapshot.get("revocations", []):
             registry.add_revocation(RevocationEvent.from_dict(item["revocation"]), recorded_at=item["recorded_at"])
-        registry._evidence_guard = evidence_guard
         return registry
 
 

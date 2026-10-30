@@ -51,8 +51,8 @@ class ConservationKernel:
         list of places that have not yet decided what authorizes a root.
 
         `evidence_guard` makes adding evidence depend on a permission the caller holds: the registry asks it before
-        adding any evidence record, whether through `kernel.registry.add_evidence` or any other route to it. It is
-        optional, and with none any caller may add evidence, as before. To guard a registry you pass in, build it with
+        adding any evidence record, whether through `kernel.registry.add_evidence` or any other route to it, and
+        about every record a snapshot restores. It is optional, and with none any caller may add evidence, as before. To guard a registry you pass in, build it with
         `EvidenceRegistry(evidence_guard=...)`.
 
         `require_content_bound` makes the registry refuse an authorization that does not carry the digest of the

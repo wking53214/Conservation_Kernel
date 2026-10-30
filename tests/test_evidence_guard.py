@@ -99,25 +99,29 @@ def test_a_registry_you_supply_with_its_own_guard_is_used_as_it_is():
     assert guard.asked == ["ev-1"]
 
 
-def test_a_snapshot_restores_with_a_guard_in_place_and_the_guard_governs_only_later_evidence():
+def test_a_snapshot_restores_with_a_guard_in_place_and_the_guard_governs_restored_and_later_evidence():
     source = EvidenceRegistry()
     source.add_evidence(evidence("ev-old"))
     guard = Guard(True)
     restored = EvidenceRegistry.restore(source.snapshot(), evidence_guard=guard)
-    assert restored.evidence("ev-old") is not None and guard.asked == []
+    assert restored.evidence("ev-old") is not None and guard.asked == ["ev-old"]
     restored.add_evidence(evidence("ev-new"))
-    assert guard.asked == ["ev-new"]
+    assert guard.asked == ["ev-old", "ev-new"]
 
 
 def test_a_kernel_restored_from_a_snapshot_can_be_given_a_guard_for_later_evidence():
     kernel = ConservationKernel(allow_unguarded_roots=True)
     kernel.registry.add_evidence(evidence("ev-old"))
-    guard = Guard(False)
+    asked = []
+
+    def guard(record):
+        asked.append(record.evidence_id)
+        return record.evidence_id == "ev-old"
     restored = ConservationKernel.from_snapshot(kernel.snapshot(), allow_unguarded_roots=True, evidence_guard=guard)
     assert restored.has_evidence_guard is True and restored.registry.evidence("ev-old") is not None
     with pytest.raises(InvalidEvent):
         restored.registry.add_evidence(evidence("ev-new"))
-    assert guard.asked == ["ev-new"]
+    assert asked == ["ev-old", "ev-new"]
 
 
 def test_a_refused_record_cannot_support_a_root_that_cites_it():
