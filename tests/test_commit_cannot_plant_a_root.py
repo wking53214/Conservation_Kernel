@@ -31,7 +31,7 @@ def handmade(artifact):
 
 
 def test_a_parentless_artifact_cannot_be_committed_past_a_closed_root_guard():
-    kernel = ConservationKernel(root_guard=lambda artifact: False)
+    kernel = ConservationKernel(root_guard=lambda artifact: False, allow_unguarded_evidence=True)
     artifact = root()
     record, result = handmade(artifact)
     with pytest.raises(LedgerError, match="no parents"):
@@ -42,7 +42,7 @@ def test_a_parentless_artifact_cannot_be_committed_past_a_closed_root_guard():
 
 
 def test_the_refusal_leaves_the_ledger_byte_identical():
-    kernel = ConservationKernel(root_guard=lambda artifact: False)
+    kernel = ConservationKernel(root_guard=lambda artifact: False, allow_unguarded_evidence=True)
     before = kernel.snapshot()
     artifact = root()
     record, result = handmade(artifact)
@@ -61,10 +61,10 @@ def test_a_ledger_with_no_guard_refuses_it_too_because_a_root_has_its_own_door()
 
 
 def test_the_door_for_roots_still_works_and_still_asks_the_guard():
-    allowed = ConservationKernel(root_guard=lambda artifact: True)
+    allowed = ConservationKernel(root_guard=lambda artifact: True, allow_unguarded_evidence=True)
     allowed.register_root(root("ok-1"))
     assert [a.artifact_id for a in allowed.ledger.artifacts()] == ["ok-1"]
-    shut = ConservationKernel(root_guard=lambda artifact: False)
+    shut = ConservationKernel(root_guard=lambda artifact: False, allow_unguarded_evidence=True)
     with pytest.raises(LedgerError, match="root guard did not authorize"):
         shut.ledger.add_initial(root("no-1"))
     assert shut.ledger.artifacts() == ()
@@ -82,7 +82,7 @@ def test_a_child_of_a_registered_root_cannot_commit_on_a_hand_written_result():
 
 
 def test_the_kernels_own_submit_with_no_inputs_is_still_rejected_and_adds_nothing():
-    kernel = ConservationKernel(root_guard=lambda artifact: False)
+    kernel = ConservationKernel(root_guard=lambda artifact: False, allow_unguarded_evidence=True)
     artifact = root("via-submit")
     record = TransformationRecord("t-9", (), artifact.artifact_id, BOT, "x", (), (), "h")
     result = kernel.submit((), artifact, record)
