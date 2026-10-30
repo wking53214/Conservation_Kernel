@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .errors import InvalidEvent
-from .events import AuthorizationEvent, EvidenceRecord, instant
+from .events import AuthorizationEvent, EvidenceRecord, RevocationEvent, instant
 
 
 class EvidenceRegistry:
@@ -30,6 +30,9 @@ class EvidenceRegistry:
         self.require_bounded = require_bounded
         self._evidence: dict[str, EvidenceRecord] = {}
         self._authorizations: dict[str, AuthorizationEvent] = {}
+        # revocation id -> (the revocation, when the registry recorded it). Recorded time is the deployer's clock,
+        # handed in by whoever records it (ConservationKernel.revoke passes its own), never the revoker's claim.
+        self._revocations: dict[str, tuple[RevocationEvent, str]] = {}
 
     def add_evidence(self, record: EvidenceRecord) -> None:
         if record.evidence_id in self._evidence:
@@ -51,6 +54,37 @@ class EvidenceRegistry:
             raise InvalidEvent(f"duplicate authorization ID {event.authorization_id}")
         self._authorizations[event.authorization_id] = event
 
+    def add_revocation(self, event: RevocationEvent, *, recorded_at: str) -> None:
+        """Record `event` as of `recorded_at` (ISO 8601 with offset), the recording clock's time.
+
+        The revoker must be a human this registry trusts, where it names them. The authorization need not be here
+        yet: a revocation that arrives first still applies when it does. A revocation whose `effective_at` is before
+        `recorded_at` is refused, because applying it would re-judge decisions already made under the authorization
+        and could leave the kernel unable to reload its own history."""
+        recorded = instant(recorded_at, "recorded_at")
+        if self.trusted_humans is not None and event.revoked_by.actor_id not in self.trusted_humans:
+            raise InvalidEvent(
+                f"revocation {event.revocation_id} is by {event.revoked_by.actor_id!r}, "
+                "which this registry does not recognise as a human authorizer"
+            )
+        if event.effective_at is not None and instant(event.effective_at, "effective_at") < recorded:
+            raise InvalidEvent(
+                f"revocation {event.revocation_id} would take effect at {event.effective_at}, before it was recorded "
+                f"at {recorded_at}; a revocation ends an authorization from a moment forward, never backward"
+            )
+        if event.revocation_id in self._revocations:
+            raise InvalidEvent(f"duplicate revocation ID {event.revocation_id}")
+        self._revocations[event.revocation_id] = (event, recorded_at)
+
+    def revocations_of(self, authorization_id: str) -> tuple[RevocationEvent, ...]:
+        """Every revocation recorded against this authorization, in force or scheduled."""
+        return tuple(event for event, _ in self._revocations.values() if event.authorization_id == authorization_id)
+
+    def _revoked_from(self, authorization_id: str) -> list:
+        """The moments from which revocations of this authorization take effect."""
+        return [instant(event.effective_at or recorded_at, "effective_at")
+                for event, recorded_at in self._revocations.values() if event.authorization_id == authorization_id]
+
     def evidence(self, evidence_id: str) -> EvidenceRecord | None:
         return self._evidence.get(evidence_id)
 
@@ -61,16 +95,20 @@ class EvidenceRegistry:
     def in_force(self, event: AuthorizationEvent, as_of: str | None) -> bool:
         """Whether `event` may be relied on at `as_of`.
 
-        An open-ended authorization holds whenever it is consulted, as every authorization did before windows. A
-        windowed one holds only inside its window, and only if `as_of` is a time this can read: an unknown time
-        (None) or an unreadable one cannot show it is in force, so it does not count."""
-        if not event.windowed:
+        An open-ended, unrevoked authorization holds whenever it is consulted, as every authorization did before
+        windows and revocation. Otherwise it holds only inside its window and before any revocation of it takes
+        effect, and only if `as_of` is a time this can read: an unknown time (None) or an unreadable one cannot
+        show it is in force, so it does not count."""
+        revoked_from = self._revoked_from(event.authorization_id)
+        if not event.windowed and not revoked_from:
             return True
         if as_of is None:
             return False
         try:
             moment = instant(as_of, "as_of")
         except InvalidEvent:
+            return False
+        if any(start <= moment for start in revoked_from):
             return False
         return event.holds_at(moment)
 
@@ -139,6 +177,10 @@ class EvidenceRegistry:
         return {
             "evidence": [item.to_dict() for item in self._evidence.values()],
             "authorizations": [item.to_dict() for item in self._authorizations.values()],
+            # Present only when there are any, so a registry with none keeps its old shape.
+            **({"revocations": [{"revocation": event.to_dict(), "recorded_at": recorded_at}
+                                for event, recorded_at in self._revocations.values()]}
+               if self._revocations else {}),
         }
 
     @classmethod
@@ -151,6 +193,8 @@ class EvidenceRegistry:
             registry.add_evidence(EvidenceRecord.from_dict(item))
         for item in snapshot.get("authorizations", []):
             registry.add_authorization(AuthorizationEvent.from_dict(item))
+        for item in snapshot.get("revocations", []):
+            registry.add_revocation(RevocationEvent.from_dict(item["revocation"]), recorded_at=item["recorded_at"])
         return registry
 
 

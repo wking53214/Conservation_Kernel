@@ -22,6 +22,7 @@ from .events import (
     AuthorizationEvent,
     DeclaredChange,
     EvidenceRecord,
+    RevocationEvent,
     TransformationRecord,
 )
 from .ledger import ConservationLedger
@@ -56,6 +57,7 @@ __all__ = [
     "ObservedChange",
     "OriginStatus",
     "Proposition",
+    "RevocationEvent",
     "TemporalMetadata",
     "TemporalScope",
     "TransformationRecord",

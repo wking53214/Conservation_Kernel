@@ -7,7 +7,7 @@ from collections.abc import Callable, Sequence
 from .enums import AuthorityStatus, CanonicalState, EpistemicStatus, TransitionKind
 from .errors import (LedgerError, RootAdmissionError, SnapshotAuthenticityError, SnapshotIntegrityError,
                      UnguardedKernelError)
-from .events import TransformationRecord
+from .events import RevocationEvent, TransformationRecord
 from .ledger import ConservationLedger
 from .model import Artifact, _digest, canonical_json, utc_now
 from .reconstruction import Reconstruction, ReconstructionEngine
@@ -116,6 +116,10 @@ class ConservationKernel:
             if event.subject_id == subject_id and event.transition_kind is kind and event.to_value == to_value:
                 return True
         return False
+
+    def revoke(self, event: RevocationEvent) -> None:
+        """Record a revocation as of this kernel's clock (see `EvidenceRegistry.add_revocation`)."""
+        self.registry.add_revocation(event, recorded_at=self.clock())
 
     def register_root(self, artifact: Artifact) -> None:
         as_of = self.clock()

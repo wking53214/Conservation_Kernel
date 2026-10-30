@@ -210,6 +210,63 @@ class AuthorizationEvent:
 
 
 @dataclass(frozen=True)
+class RevocationEvent:
+    """A human ending an authorization from a moment forward.
+
+    It takes effect when the deciding kernel records it, or at the later `effective_at` if one is given, and from
+    then on the authorization it names does not count. It never reaches back: `EvidenceRegistry.add_revocation`
+    refuses one whose `effective_at` is before the moment it is recorded, so a decision made while the
+    authorization held stays valid and still re-verifies. Any human the registry trusts may revoke: ending an
+    authorization can only take power away."""
+
+    revocation_id: str
+    authorization_id: str
+    revoked_by: Actor
+    reason: str
+    effective_at: str | None = None
+    created_at: str = field(default_factory=utc_now)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.revocation_id, str) or not self.revocation_id.strip():
+            raise InvalidEvent("revocation requires revocation_id")
+        if not isinstance(self.authorization_id, str) or not self.authorization_id.strip():
+            raise InvalidEvent("revocation requires the authorization_id it ends")
+        if not isinstance(self.revoked_by, Actor):
+            raise InvalidEvent("revocation requires an Actor")
+        if self.revoked_by.kind is not ActorKind.HUMAN:
+            raise InvalidEvent("only a human actor can revoke an authorization")
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise InvalidEvent("revocation requires a reason")
+        if self.effective_at is not None:
+            instant(self.effective_at, "effective_at")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "revocation_id": self.revocation_id,
+            "authorization_id": self.authorization_id,
+            "revoked_by": self.revoked_by.to_dict(),
+            "reason": self.reason,
+            "effective_at": self.effective_at,
+            "created_at": self.created_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "RevocationEvent":
+        required = ("revocation_id", "authorization_id", "revoked_by", "reason", "effective_at", "created_at")
+        for name in required:
+            if name not in data:
+                raise InvalidEvent(f"revocation missing required field {name!r}")
+        return cls(
+            revocation_id=data["revocation_id"],
+            authorization_id=data["authorization_id"],
+            revoked_by=Actor.from_dict(data["revoked_by"]),
+            reason=data["reason"],
+            effective_at=data["effective_at"],
+            created_at=data["created_at"],
+        )
+
+
+@dataclass(frozen=True)
 class EvidenceRecord:
     evidence_id: str
     subject_id: str
