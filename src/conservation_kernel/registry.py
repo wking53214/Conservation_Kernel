@@ -46,7 +46,19 @@ class EvidenceRegistry:
         return self._evidence.get(evidence_id)
 
     def authorization(self, authorization_id: str) -> AuthorizationEvent | None:
+        """The authorization with this id, whatever its standing. To decide with it, use `at(as_of)`."""
         return self._authorizations.get(authorization_id)
+
+    def in_force(self, event: AuthorizationEvent, as_of: str | None) -> bool:
+        """Whether `event` may be relied on at `as_of`."""
+        return True
+
+    def at(self, as_of: str | None) -> "RegistryAt":
+        """This registry as of one moment: an authorization counts only if it is in force then.
+
+        The verifier and the kernel decide through this view, so no check can consult an authorization
+        without its time being applied. `as_of` None means the time is unknown."""
+        return RegistryAt(self, as_of)
 
     def has_active_evidence(
         self,
@@ -87,10 +99,11 @@ class EvidenceRegistry:
         transition_kind,
         from_value,
         to_value,
+        as_of: str | None = None,
     ) -> bool:
         for ref in refs:
             event = self._authorizations.get(ref)
-            if event is None:
+            if event is None or not self.in_force(event, as_of):
                 continue
             if event.subject_id != subject_id:
                 continue
@@ -118,3 +131,36 @@ class EvidenceRegistry:
         for item in snapshot.get("authorizations", []):
             registry.add_authorization(AuthorizationEvent.from_dict(item))
         return registry
+
+
+class RegistryAt:
+    """An `EvidenceRegistry` seen as of one moment (see `EvidenceRegistry.at`).
+
+    Evidence lookups pass straight through. Authorization lookups return only what is in force at
+    `as_of`, so a caller holding this view cannot reach an expired or revoked authorization by mistake."""
+
+    def __init__(self, registry: EvidenceRegistry, as_of: str | None) -> None:
+        self.registry = registry
+        self.as_of = as_of
+
+    def at(self, as_of: str | None) -> "RegistryAt":
+        return RegistryAt(self.registry, as_of)
+
+    def evidence(self, evidence_id: str):
+        return self.registry.evidence(evidence_id)
+
+    def has_active_evidence(self, refs, **kwargs) -> bool:
+        return self.registry.has_active_evidence(refs, **kwargs)
+
+    def inactive_refs(self, refs):
+        return self.registry.inactive_refs(refs)
+
+    def missing_refs(self, refs):
+        return self.registry.missing_refs(refs)
+
+    def authorization(self, authorization_id: str) -> AuthorizationEvent | None:
+        event = self.registry.authorization(authorization_id)
+        return event if event is not None and self.registry.in_force(event, self.as_of) else None
+
+    def has_authorization(self, refs, **kwargs) -> bool:
+        return self.registry.has_authorization(refs, as_of=self.as_of, **kwargs)

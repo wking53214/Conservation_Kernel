@@ -19,7 +19,7 @@ from .enums import (
 )
 from .events import TransformationRecord
 from .model import Artifact, Proposition, canonical_json
-from .registry import EvidenceRegistry
+from .registry import EvidenceRegistry, RegistryAt
 from .result import ObservedChange, VerificationResult, Violation
 
 
@@ -68,7 +68,17 @@ class IndependentVerifier:
         output: Artifact,
         record: TransformationRecord,
         registry: EvidenceRegistry,
+        *,
+        as_of: str | None = None,
     ) -> VerificationResult:
+        """`as_of` is when this is being decided (ISO 8601 with offset). Every authorization is judged as of then.
+        The kernel does not pass it: it hands in `registry.at(its clock)`, a view that already carries the time, so a
+        verifier written before times existed still receives one. None, on a plain registry, means the time is
+        unknown: an authorization that only holds for a while, or that has been revoked, then cannot be shown to be
+        in force and does not count."""
+        if as_of is not None or not isinstance(registry, RegistryAt):
+            registry = registry.at(as_of)
+        as_of = registry.as_of
         inputs = (input_artifacts,) if isinstance(input_artifacts, Artifact) else tuple(input_artifacts)
         violations: list[Violation] = []
         unknown: list[str] = []
@@ -222,6 +232,7 @@ class IndependentVerifier:
             violations=tuple(violations),
             unverifiable_properties=tuple(dict.fromkeys(unknown)),
             checked_dimensions=tuple(Dimension),
+            verified_at=as_of,
         )
 
     def _check_evidence_refs(self, proposition: Proposition, refs: tuple[str, ...], registry: EvidenceRegistry, violation) -> None:

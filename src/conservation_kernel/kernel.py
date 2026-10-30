@@ -9,7 +9,7 @@ from .errors import (LedgerError, RootAdmissionError, SnapshotAuthenticityError,
                      UnguardedKernelError)
 from .events import TransformationRecord
 from .ledger import ConservationLedger
-from .model import Artifact, _digest, canonical_json
+from .model import Artifact, _digest, canonical_json, utc_now
 from .reconstruction import Reconstruction, ReconstructionEngine
 from .registry import EvidenceRegistry
 from .result import VerificationResult
@@ -34,8 +34,13 @@ class ConservationKernel:
         ledger: ConservationLedger | None = None,
         root_guard: Callable[[Artifact], bool] | None = None,
         allow_unguarded_roots: bool = False,
+        clock: Callable[[], str] | None = None,
     ) -> None:
-        """`root_guard` makes registering a root depend on a permission the caller holds: the ledger asks it
+        """`clock` returns the time the kernel decides at (ISO 8601 with offset). Every decision and root admission
+        is stamped with it and judged as of it. It defaults to this machine's UTC clock; a deployment should hand in
+        the clock of the ledger it writes to, since a time-limited authorization is only as good as that time.
+
+        `root_guard` makes registering a root depend on a permission the caller holds: the ledger asks it
         before adding any initial artifact, whether through `register_root` or `ledger.add_initial`. To guard a
         ledger you pass in, build it with `ConservationLedger(root_guard=...)`.
 
@@ -46,6 +51,7 @@ class ConservationKernel:
         if root_guard is not None and ledger is not None:
             raise ValueError("pass the root guard to the ledger you supply, not to the kernel as well")
         self.registry = registry or EvidenceRegistry()
+        self.clock = clock or utc_now
         self.verifier = verifier or IndependentVerifier()
         self.ledger = ledger or ConservationLedger(root_guard=root_guard)
         if not self.ledger.has_root_guard and not allow_unguarded_roots:
@@ -67,7 +73,7 @@ class ConservationKernel:
     CANONICAL_STATES = frozenset({CanonicalState.ACCEPTED, CanonicalState.CANONICAL, CanonicalState.SUPERSEDED,
                                   CanonicalState.REVOKED, CanonicalState.DELETED})
 
-    def admit_root(self, artifact: Artifact) -> tuple[str, ...]:
+    def admit_root(self, artifact: Artifact, *, as_of: str | None = None) -> tuple[str, ...]:
         """Reasons this artifact may not be registered as a root; empty if it may.
 
         The constitution constrains transitions, so a root is asserted. But an
@@ -76,7 +82,10 @@ class ConservationKernel:
         authorization for that proposition, a fact with no evidence, or an
         observation with no source, is a forged origin story, and everything derived from it would inherit
         verified ancestry it never had.
+
+        Authorizations are judged as of `as_of`, or as of the kernel's clock now when it is not given.
         """
+        registry = self.registry.at(as_of if as_of is not None else self.clock())
         reasons: list[str] = []
         for prop in artifact.propositions:
             missing = self.registry.missing_refs(prop.evidence_refs)
@@ -86,10 +95,10 @@ class ConservationKernel:
             if dangling:
                 reasons.append(f"{prop.proposition_id}: authorization_refs not in registry: {list(dangling)}")
             if prop.authority in self.AUTHORITATIVE and not self._authorized(
-                    prop.authorization_refs, prop.proposition_id, TransitionKind.AUTHORITY_ESCALATION, prop.authority.value):
+                    registry, prop.authorization_refs, prop.proposition_id, TransitionKind.AUTHORITY_ESCALATION, prop.authority.value):
                 reasons.append(f"{prop.proposition_id}: authority {prop.authority.value} has no authorization for this proposition")
             if prop.canonical_state in self.CANONICAL_STATES and not self._authorized(
-                    prop.authorization_refs, prop.proposition_id, TransitionKind.CANONICALIZATION, prop.canonical_state.value):
+                    registry, prop.authorization_refs, prop.proposition_id, TransitionKind.CANONICALIZATION, prop.canonical_state.value):
                 reasons.append(f"{prop.proposition_id}: canonical state {prop.canonical_state.value} has no canonicalization for this proposition")
             if prop.epistemic_status in self.STRONG_EPISTEMIC and not (prop.source_refs or prop.evidence_refs):
                 reasons.append(f"{prop.proposition_id}: a root {prop.epistemic_status.value} must cite a source or evidence")
@@ -98,9 +107,10 @@ class ConservationKernel:
                                "a source alone supports an OBSERVATION or an INFERENCE, not a FACT")
         return tuple(reasons)
 
-    def _authorized(self, refs, subject_id: str, kind: TransitionKind, to_value: str) -> bool:
+    @staticmethod
+    def _authorized(registry, refs, subject_id: str, kind: TransitionKind, to_value: str) -> bool:
         for ref in refs:
-            event = self.registry.authorization(ref)
+            event = registry.authorization(ref)
             if event is None:
                 continue
             if event.subject_id == subject_id and event.transition_kind is kind and event.to_value == to_value:
@@ -108,10 +118,11 @@ class ConservationKernel:
         return False
 
     def register_root(self, artifact: Artifact) -> None:
-        reasons = self.admit_root(artifact)
+        as_of = self.clock()
+        reasons = self.admit_root(artifact, as_of=as_of)
         if reasons:
             raise RootAdmissionError("root refused: " + "; ".join(reasons))
-        self.ledger.add_initial(artifact)
+        self.ledger.add_initial(artifact, admitted_at=as_of)
 
     def submit(
         self,
@@ -119,7 +130,7 @@ class ConservationKernel:
         output: Artifact,
         record: TransformationRecord,
     ) -> VerificationResult:
-        result = self.verifier.verify(input_artifacts, output, record, self.registry)
+        result = self.verifier.verify(input_artifacts, output, record, self.registry.at(self.clock()))
         if result.accepted:
             try:
                 self.ledger.commit(output, record, result)
@@ -156,7 +167,8 @@ class ConservationKernel:
     @classmethod
     def from_snapshot(cls, snapshot: dict, *, trusted_humans=None, reverify: bool = True, signer=None,
                       root_guard: Callable[[Artifact], bool] | None = None,
-                      allow_unguarded_roots: bool = False) -> "ConservationKernel":
+                      allow_unguarded_roots: bool = False,
+                      clock: Callable[[], str] | None = None) -> "ConservationKernel":
         """A kernel continuing from `snapshot()`.
 
         The digest is checked first (corruption). Then, with `reverify`, every
@@ -182,16 +194,17 @@ class ConservationKernel:
                 raise SnapshotAuthenticityError(f"snapshot not authenticated: {problem}")
         registry = EvidenceRegistry.restore(body.get("registry", {}), trusted_humans=trusted_humans)
         ledger = ConservationLedger.restore(body.get("ledger", {}), root_guard=root_guard)
-        kernel = cls(registry=registry, ledger=ledger, allow_unguarded_roots=allow_unguarded_roots)
+        kernel = cls(registry=registry, ledger=ledger, allow_unguarded_roots=allow_unguarded_roots, clock=clock)
         if reverify:
             kernel.reverify()
         return kernel
 
     def reverify(self) -> None:
-        """Re-admit every root and re-verify every transformation now in the ledger."""
+        """Re-admit every root and re-verify every transformation now in the ledger, each as of when it was first
+        accepted. A root or transformation recorded without a time is judged as of now."""
         for artifact in self.ledger.artifacts():
             if not artifact.parent_artifact_ids:
-                reasons = self.admit_root(artifact)
+                reasons = self.admit_root(artifact, as_of=self.ledger.admitted_at(artifact.artifact_id))
                 if reasons:
                     raise SnapshotIntegrityError(f"root {artifact.artifact_id} would not be admitted: " + "; ".join(reasons))
         for record in self.ledger.transformations():
@@ -200,7 +213,8 @@ class ConservationKernel:
                 output = self.ledger.artifact(record.output_artifact_id)
             except KeyError as e:
                 raise SnapshotIntegrityError(f"transformation {record.transformation_id} references an artifact not in the ledger: {e}") from e
-            result = self.verifier.verify(inputs, output, record, self.registry)
+            as_of = self.ledger.verified_at(record.transformation_id) or self.clock()
+            result = self.verifier.verify(inputs, output, record, self.registry.at(as_of))
             if not result.accepted:
                 raise SnapshotIntegrityError(
                     f"transformation {record.transformation_id} does not re-verify: "
