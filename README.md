@@ -177,7 +177,7 @@ the rejection) and returns the verdict as a bound `cns.gate.GateResult`.
 | `REJECT` | `TERMINAL_BREACH`; the reason lists every violation code |
 | `UNVERIFIABLE` | `TERMINAL_BREACH` (the kernel never treats it as a pass) |
 | accepted, then the ledger refuses (`LedgerError`; `submit_to_cns` only) | `TERMINAL_BREACH` with the ledger's reason. `kernel.submit` raises here. |
-| root registration (`CnsRootAdmissionGate`, `root_refusals`) | `ALPHA`: judged before the root is registered. Nothing refuses it is `PASS`. Any refusal is `TERMINAL_BREACH`, whether from `admit_root` (the propositions) or from the ledger (the artifact already has parents, or its id is already registered). `admit_root` alone does not see the ledger's refusals, so the gate does not rely on it alone. |
+| root registration (`CnsRootAdmissionGate`, `root_refusals`) | `ALPHA`: judged before the root is registered. Nothing refuses it is `PASS`. Any refusal is `TERMINAL_BREACH`, whether from `admit_root` (the propositions) or from the ledger (the artifact already has parents, or its id is already registered). `admit_root` alone does not see the ledger's refusals, so the gate does not rely on it alone. With `require_guard=True` or `require_evidence_guard=True` (both default off, independent) it also refuses a kernel built without a root guard or without an evidence guard. |
 | retry | never produced. The kernel models no retry or repair (`docs/GATEWAY.md`), and the connector does not invent one. |
 | judged content | `subject` label plus `subject_digest` over the ids, the kernel's own `artifact_digest` of every input and the output, and `TransformationRecord.canonical_digest()`. The evidence registry is the witness, not the judged content, so it is not in the digest. |
 

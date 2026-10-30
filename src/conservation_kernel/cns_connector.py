@@ -547,17 +547,24 @@ class CnsRootAdmissionGate:
     something if the kernel it was issued for will not register a root without
     one, so a roster that issues approvals should say so. The default is
     ``False``, which judges the root exactly as before.
+
+    ``require_evidence_guard=True`` does the same for evidence: a root cites
+    evidence in the registry, so a kernel whose registry takes any record from
+    any caller lets a FACT stand on a citation nobody vouched for. With the
+    flag the gate refuses (``TERMINAL_BREACH``) a kernel built without an
+    evidence guard. Default ``False``.
     """
 
     name = ROOT_GATE_NAME
 
     def __init__(self, kernel: ConservationKernel, *, subject: str = DEFAULT_ROOT_SUBJECT,
-                 require_guard: bool = False) -> None:
+                 require_guard: bool = False, require_evidence_guard: bool = False) -> None:
         _cns_gate()  # fail here, at construction, not on first use
         _require_subject(subject)
         self._kernel = kernel
         self._subject = subject
         self._require_guard = require_guard
+        self._require_evidence_guard = require_evidence_guard
 
     @property
     def position(self) -> Any:
@@ -572,6 +579,9 @@ class CnsRootAdmissionGate:
         if self._require_guard and not self._kernel.has_root_guard:
             reasons = (*reasons, "this kernel has no root guard, so nothing stops it registering a root "
                                  "without an approved decision")
+        if self._require_evidence_guard and not self._kernel.has_evidence_guard:
+            reasons = (*reasons, "this kernel has no evidence guard, so its registry takes evidence from any "
+                                 "caller and a root can cite a record nobody vouched for")
         return admission_to_cns_result(reasons, candidate, subject=self._subject)
 
 
