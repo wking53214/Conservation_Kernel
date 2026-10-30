@@ -1,6 +1,6 @@
 # Conservation_Kernel
 
-Independently testable **hostile baseline** for transformation conservation. Version as tagged (`CHANGELOG.md`; live path pins `25145aa` / 0.3.0). Stdlib only. Python ≥ 3.11.
+Independently testable **hostile baseline** for transformation conservation. Version 0.3.0, not yet tagged (`CHANGELOG.md` lists it under Unreleased; live path pins `25145aa` / 0.3.0). Stdlib only. Python ≥ 3.11.
 
 ## 1. Pipeline Position & Role
 
@@ -72,6 +72,32 @@ Natural-language semantic equivalence is **unverifiable** when content changes. 
 | Not a product | Commercial red team: receipt library is a **component of the spine**, not a purchase. |
 | No Raft, no multi-region | Single-process verifier. |
 
+### Release and test status
+
+Measured 2026-10-30 at main `7233ab6`.
+
+| What | State |
+|---|---|
+| Version | 0.3.0 (`pyproject.toml` and `__version__`). `ConservationKernel.version` still reads 0.2.0 and is what snapshots record as `kernel_version`; the two have not been brought together. |
+| Tag and GitHub Release | None yet. The changelog has no 0.2.0 or 0.3.0 heading; both are under Unreleased. Tagging is the owner's decision. |
+| CI on main | Green (tests on Python 3.11 and 3.12, with and without CNS, plus ruff 0.15.22) |
+| Tests | 177 passed and 2 skipped without CNS, 320 passed with the `cns` extra installed |
+| CNS pin | The optional `cns` extra is pinned to the tag v2.2.0, the same as the rest of the spine |
+
+### Which doors write, and what protects each
+
+| Door | Protection today |
+|---|---|
+| `register_root` and `ledger.add_initial` | The root guard. A kernel refuses to be built without one unless `allow_unguarded_roots=True` says so. The guard answers only `True` to permit. |
+| `ledger.commit` | A bookkeeping step after a result says accepted. It is not a permission check: a result is a plain object the caller can write. |
+| `ConservationKernel.submit` | The verifier decides. Any caller may submit. |
+| `registry.add_authorization`, `add_delegation`, `revoke` | Only from a human in `trusted_humans`, when the deployer sets that. With it unset, any actor id is accepted. |
+| `registry.add_evidence` | None. Any caller can add active evidence that declares itself independent. The registry is meant to be the deployer's protocol boundary. |
+| `ledger.record_rejection`, `record_times` | None. A report can be added by any caller holding the ledger; times are set once and never replaced. |
+| `from_snapshot` and `load` | Digest check and re-verification; a signature only if the loader passes a signer. |
+
+Whether to give the unprotected doors a caller permission, as CCC has for its record-creating doors, is an open decision for the owner.
+
 `python3 -m pytest -q` (hostile suite included). `PYTHONPATH=src python3 experiments/run_experiment.py` is a simulated control/treatment, **not** a population claim about LLMs.
 
 ## 5. Core Invariants & Guarantees
@@ -108,6 +134,12 @@ sentinel_os.governance_harness._write_decision
         → conservation/boundary.py → this verifier → else fail-close ledger write
 ```
 
+### Place in the evidence spine
+
+The evidence spine is the five repositories a document passes through in order: HERALD reads it and extracts claims, TIE records the evidence, Conservation_Kernel decides whether a root may be admitted, Governance_Gateway judges the admission door, and CCC takes the document into its store. CNS holds the roster that makes the decision, the check that every seat judged the same document, and the one-use guard that lets an approved decision open only the door it judged. `chains/evidence_spine.py` in CNS runs all of it end to end. Measured 2026-10-30 with every repository at main: 30 results, all ok, and exactly one recorded GAP (a kernel built without its guard and called directly), which the script asserts as a stated fact and never skips.
+
+Conservation_Kernel is the third hop. It admits or refuses a root, and a root is registered only with its guard's permission. In the spine the guard is a one-use `DecisionGuard`, so an approved decision opens the kernel once, for the one root it judged.
+
 Docs: `docs/INVARIANTS.md`, `docs/THREAT_MODEL.md`, `docs/LIMITATIONS.md`, `docs/HOSTILE_REVIEW.md`.
 
 ## 8. Connecting to CNS (optional)
@@ -118,7 +150,7 @@ present, `conservation_kernel.cns_connector` expresses the kernel's verdicts as
 CNS gate results so they can be resolved alongside gates from other
 repositories. The kernel's own verdicts and behavior are unchanged.
 
-The `cns` extra pins CNS by git commit, which PyPI does not accept, so this
+The `cns` extra pins CNS by git tag (v2.2.0), which PyPI does not accept, so this
 package is installed from git or from a checkout rather than from an index:
 
 ```
