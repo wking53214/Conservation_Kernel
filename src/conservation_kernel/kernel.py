@@ -5,8 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 
 from .enums import AuthorityStatus, CanonicalState, EpistemicStatus, TransitionKind
-from .errors import (LedgerError, RootAdmissionError, SnapshotAuthenticityError, SnapshotIntegrityError,
-                     UnguardedKernelError)
+from .errors import LedgerError, SnapshotAuthenticityError, SnapshotIntegrityError, UnguardedKernelError
 from .events import EvidenceRecord, RevocationEvent, TransformationRecord, instant
 from .ledger import ConservationLedger
 from .model import Artifact, _digest, canonical_json, utc_now
@@ -68,7 +67,7 @@ class ConservationKernel:
                 "approved decision required. Pass root_guard=..., or allow_unguarded_roots=True if that is "
                 "deliberate."
             )
-        self.ledger._bind(self.registry.issuer)
+        self.ledger._bind(self.registry.issuer, self.admit_root)
         self.reconstruction = ReconstructionEngine()
 
     @property
@@ -144,11 +143,8 @@ class ConservationKernel:
         self.registry.add_revocation(event, recorded_at=self._now())
 
     def register_root(self, artifact: Artifact) -> None:
-        as_of = self._now()
-        reasons = self.admit_root(artifact, as_of=as_of)
-        if reasons:
-            raise RootAdmissionError("root refused: " + "; ".join(reasons))
-        self.ledger.add_initial(artifact, admitted_at=as_of)
+        # The ledger asks `admit_root` itself, as of the time given here, so this door and `ledger.add_initial` agree.
+        self.ledger.add_initial(artifact, admitted_at=self._now())
 
     def submit(
         self,

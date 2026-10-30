@@ -88,7 +88,7 @@ Measured 2026-10-30 at main `7233ab6`.
 
 | Door | Protection today |
 |---|---|
-| `register_root` and `ledger.add_initial` | The root guard. A kernel refuses to be built without one unless `allow_unguarded_roots=True` says so. The guard answers only `True` to permit. |
+| `register_root` and `ledger.add_initial` | The root guard, and on a ledger a kernel owns the kernel's `admit_root` (every reference a root cites must exist and back what it claims), asked first. A kernel refuses to be built without a guard unless `allow_unguarded_roots=True` says so. The guard answers only `True` to permit. |
 | `ledger.commit` | Takes only a result the verifier produced for this record and output (`VerificationResult.proof`); a result written by hand, or edited after verification, is refused. A ledger a kernel owns also refuses one reached against any registry but that kernel's. |
 | `ConservationKernel.submit` | The verifier decides. Any caller may submit. |
 | `registry.add_authorization`, `add_delegation`, `revoke` | Only from a human in `trusted_humans`, when the deployer sets that. With it unset, any actor id is accepted. |

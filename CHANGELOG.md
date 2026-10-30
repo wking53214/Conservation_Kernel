@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `ledger.add_initial` on a ledger a kernel owns applies the kernel's `admit_root`, before the root guard, so a root that
+  cites evidence or authorizations the registry does not hold is refused through either door; it used to register
+  through `kernel.ledger.add_initial` although `register_root` refused it. `register_root` now delegates to it. A ledger
+  no kernel owns has no registry to check against and is unchanged.
 - `ConservationLedger.commit` takes only a result the verifier produced. A result is a plain object a caller can write,
   so a hand-built `PASS` used to commit a child the verifier rejects (an INFERENCE lifted to a canonical FACT on
   authorization refs that do not exist). `IndependentVerifier.verify` now attaches a proof (`VerificationResult.proof`,

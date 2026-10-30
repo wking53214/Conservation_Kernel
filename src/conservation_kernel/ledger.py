@@ -20,7 +20,7 @@ class ConservationLedger:
 
     def __init__(self, *, root_guard: Callable[[Artifact], bool] | None = None) -> None:
         """`root_guard`, if given, is asked before any initial artifact is added, and the artifact is added only
-        if it answers True. It is the caller's own permission check (the kernel imports nothing to supply one); a
+        if it answers True. A ledger owned by a kernel also holds every root to the kernel's `admit_root`. It is the caller's own permission check (the kernel imports nothing to supply one); a
         guard that raises or answers anything but True refuses. Rebuilding a ledger from a snapshot does not ask it."""
         self._root_guard = root_guard
         self._artifacts: dict[str, Artifact] = {}
@@ -34,13 +34,16 @@ class ConservationLedger:
         # The registry of the kernel that owns this ledger, once one does (`_bind`). A ledger with no kernel has no
         # registry of its own to hold a verdict against, so it takes any result the verifier produced.
         self._issuer: str | None = None
+        self._admit_root: Callable[..., tuple[str, ...]] | None = None
 
-    def _bind(self, issuer: str) -> None:
+    def _bind(self, issuer: str, admit_root: Callable[..., tuple[str, ...]]) -> None:
         """Called by the kernel that takes this ledger: from now on `commit` takes only a result the verifier produced
-        against that kernel's registry."""
+        against that kernel's registry, and `add_initial` asks `admit_root(artifact, as_of=...)` (the kernel's own
+        admission, which reads the registry) before it adds a root."""
         if self._issuer is not None and self._issuer != issuer:
             raise LedgerError("this ledger already belongs to a kernel with another registry")
         self._issuer = issuer
+        self._admit_root = admit_root
 
     @property
     def has_root_guard(self) -> bool:
@@ -52,6 +55,12 @@ class ConservationLedger:
             raise LedgerError("an initial artifact cannot already have parents")
         if artifact.artifact_id in self._artifacts:
             raise LedgerError(f"duplicate artifact ID {artifact.artifact_id}")
+        if self._admit_root is not None:
+            # Whatever door a root comes through, it is held to what the registry backs. Asked before the guard, so a
+            # one-use permission is not spent on a root that could never be admitted.
+            reasons = self._admit_root(artifact, as_of=admitted_at)
+            if reasons:
+                raise RootAdmissionError("root refused: " + "; ".join(reasons))
         if self._root_guard is not None:
             try:
                 permitted = self._root_guard(artifact) is True
