@@ -179,6 +179,12 @@ class ConservationKernel:
         output: Artifact,
         record: TransformationRecord,
     ) -> VerificationResult:
+        # An input that shares an id with a ledger artifact must be that artifact. Otherwise the verifier would judge
+        # a "before" the caller wrote, and the ledger would record a child of a parent that never looked like that.
+        for item in (input_artifacts,) if isinstance(input_artifacts, Artifact) else tuple(input_artifacts):
+            held = self.ledger.get(item.artifact_id)
+            if held is not None and held != item:
+                raise LedgerError(f"input artifact {item.artifact_id} is not the artifact the ledger holds under that id")
         result = self.verifier.verify(input_artifacts, output, record, self.registry.at(self._now()))
         if result.accepted:
             try:
@@ -189,10 +195,10 @@ class ConservationKernel:
                 # the accepted result vanished with the exception (measured
                 # 2026-09-08), so a verification that occurred left no trace.
                 # Keep the report, then let the caller see the ledger's refusal.
-                self.ledger.record_rejection(result)
+                self.ledger.record_rejection(result, record, output)
                 raise
         else:
-            self.ledger.record_rejection(result)
+            self.ledger.record_rejection(result, record, output)
         return result
 
     def reconstruct(self, artifact_id: str) -> Reconstruction:
@@ -287,7 +293,7 @@ class ConservationKernel:
                     f"transformation {record.transformation_id} does not re-verify: "
                     + "; ".join(f"{v.code}" for v in result.violations)
                 )
-        self.ledger.record_times(admitted=unstamped_roots, verified=unstamped_transformations)
+        self.ledger._record_times(admitted=unstamped_roots, verified=unstamped_transformations)
 
     @staticmethod
     def _recorded(stamp: str | None, now: str, what: str) -> str:

@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- `ConservationLedger.record_rejection(result, record, output)` takes only a result the verifier produced for that
+  record and output, the way `commit` does, and a ledger a kernel owns only one reached against its registry. It took
+  any `VerificationResult`, so a hand-written `PASS` could sit in the history beside the real verdicts (nothing decides
+  from reports, but an auditor reads them as what the verifier said). **Breaking:** the method now needs the record
+  and output; `submit` and the experiment pass them. Reports restored from a snapshot carry no proof and are history
+  only, as before.
+- `ConservationLedger.record_times` is now private (`_record_times`). It let any caller stamp an unstamped root or
+  transformation with a time of their choosing, and a restore judges each as of its stamp, so a stamp in the past put
+  history outside every revocation or expiry recorded after it. The kernel's own reload still stamps unstamped history
+  once, with its clock. **Breaking:** code that called `ledger.record_times` has no replacement; times come from the
+  kernel's clock.
+- `ConservationKernel.submit` refuses (`LedgerError`) an input artifact that shares an id with a ledger artifact but is
+  not that artifact. It used to verify whatever "before" the caller handed in, so a doctored copy of a registered root
+  (an INFERENCE shown as a FACT with real evidence) let a FACT child of an INFERENCE root into the ledger, which the
+  next restore then refused to reload. Inputs not in the ledger are unchanged (the commit still refuses them).
+  `ConservationLedger.get(artifact_id)` returns the held artifact or None.
 - A kernel now refuses to be built without an evidence guard: `ConservationKernel(...)` and `from_snapshot(...)` raise
   `UnguardedKernelError` unless `evidence_guard=...` is given (or the registry you pass in has one) or
   `allow_unguarded_evidence=True` says that is deliberate, mirroring `allow_unguarded_roots`. With a root guard but no

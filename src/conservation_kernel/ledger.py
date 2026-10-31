@@ -83,9 +83,11 @@ class ConservationLedger:
         reported but refused by the ledger, and must not move this transformation's time."""
         return self._verified_at.get(transformation_id)
 
-    def record_times(self, *, admitted: dict[str, str] | None = None, verified: dict[str, str] | None = None) -> None:
+    def _record_times(self, *, admitted: dict[str, str] | None = None, verified: dict[str, str] | None = None) -> None:
         """Give a time to history that has none (roots or committed transformations written before times existed,
-        or straight to the ledger). A time already recorded is never replaced."""
+        or straight to the ledger). A time already recorded is never replaced. Not public: a restore judges each item
+        as of its stamp, so a stamp a caller chose could put history outside a later revocation or expiry. Only the
+        kernel's own reload, which stamps with its clock, calls this."""
         for artifact_id, moment in (admitted or {}).items():
             if artifact_id not in self._artifacts:
                 raise LedgerError(f"no artifact {artifact_id} to record a time for")
@@ -131,11 +133,25 @@ class ConservationLedger:
         if result.verified_at is not None:
             self._verified_at[record.transformation_id] = result.verified_at
 
-    def record_rejection(self, result: VerificationResult) -> None:
+    def record_rejection(self, result: VerificationResult, record: TransformationRecord, output: Artifact) -> None:
+        """Keep `result` as a report. Like `commit`, it takes only a result the verifier produced for exactly this
+        record and output (and, on a ledger a kernel owns, against that kernel's registry), so a verdict written by
+        hand cannot sit in the history beside the real ones. It may be a rejection or an accepted result the ledger
+        then refused to commit."""
+        issuer = _proof_issuer(result, record, output)
+        if issuer is None:
+            raise LedgerError("the result was not produced by the verifier for this record and output, "
+                              "so it is not kept as a report")
+        if self._issuer is not None and issuer != self._issuer:
+            raise LedgerError("the result was verified against a registry other than this ledger's kernel's")
         self._reports.append(result)
 
     def artifact(self, artifact_id: str) -> Artifact:
         return self._artifacts[artifact_id]
+
+    def get(self, artifact_id: str) -> Artifact | None:
+        """The artifact with this id, or None if the ledger holds none."""
+        return self._artifacts.get(artifact_id)
 
     def artifacts(self) -> tuple[Artifact, ...]:
         return tuple(self._artifacts.values())

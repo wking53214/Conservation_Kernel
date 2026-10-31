@@ -90,13 +90,14 @@ Measured 2026-10-30 at main `7233ab6`.
 |---|---|
 | `register_root` and `ledger.add_initial` | The root guard, and on a ledger a kernel owns the kernel's `admit_root` (every reference a root cites must exist and back what it claims), asked first. A kernel refuses to be built without a guard unless `allow_unguarded_roots=True` says so. The guard answers only `True` to permit. |
 | `ledger.commit` | Takes only a result the verifier produced for this record and output (`VerificationResult.proof`); a result written by hand, or edited after verification, is refused. A ledger a kernel owns also refuses one reached against any registry but that kernel's. |
-| `ConservationKernel.submit` | The verifier decides. Any caller may submit. |
+| `ConservationKernel.submit` | The verifier decides. Any caller may submit, but an input that shares an id with a ledger artifact must be that artifact. |
 | `registry.add_authorization`, `add_delegation`, `revoke` | Only from a human in `trusted_humans`, when the deployer sets that. With it unset, any actor id is accepted. An authorization that carries a `subject_digest` counts only for the proposition with that digest, and with `require_content_bound` one without a digest is refused. |
 | `registry.add_evidence` | Optional. With `evidence_guard` on the registry (or on the kernel that builds it), a record is added only if the guard answers exactly `True`; a raise or any other answer refuses and leaves the registry unchanged. A duplicate id is refused before the guard is asked, and evidence restored from a snapshot is put to it too, so a file cannot plant what the guard would refuse. A kernel refuses to be built without an evidence guard unless `allow_unguarded_evidence=True` says so (the same rule as `allow_unguarded_roots`), because with no guard any caller can add active evidence that declares itself independent. A bare `EvidenceRegistry` with no guard still takes any caller's evidence. |
-| `ledger.record_rejection`, `record_times` | None. A report can be added by any caller holding the ledger; times are set once and never replaced. |
+| `ledger.record_rejection` | Takes only a result the verifier produced for the record and output it is given (its proof must check), and on a ledger a kernel owns only one reached against that kernel's registry. |
+| times on roots and transformations | Set by the kernel's clock when it admits or accepts, and once by its own reload for history that has none. There is no public door to stamp a time. |
 | `from_snapshot` and `load` | Digest check and re-verification; a signature only if the loader passes a signer. |
 
-Evidence is the first of the open doors to get an optional caller permission, because the verifier trusts evidence to approve strong claims. Whether `submit` and `ledger.record_rejection` should get one too is an open decision for the owner, and the CNS evidence spine does not yet pass an evidence guard.
+Evidence is the first of the open doors to get an optional caller permission, because the verifier trusts evidence to approve strong claims. Whether `submit` should get one too is an open decision for the owner, and the CNS evidence spine does not yet pass an evidence guard.
 
 `python3 -m pytest -q` (hostile suite included). `PYTHONPATH=src python3 experiments/run_experiment.py` is a simulated control/treatment, **not** a population claim about LLMs.
 
