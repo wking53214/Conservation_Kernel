@@ -11,7 +11,7 @@ from .ledger import ConservationLedger
 from .model import Artifact, _digest, canonical_json, utc_now
 from .reconstruction import Reconstruction, ReconstructionEngine
 from .registry import EvidenceRegistry
-from .result import VerificationResult
+from .result import VerificationResult, _is_undigestable
 from .verifier import IndependentVerifier
 
 
@@ -195,11 +195,18 @@ class ConservationKernel:
                 # the accepted result vanished with the exception (measured
                 # 2026-09-08), so a verification that occurred left no trace.
                 # Keep the report, then let the caller see the ledger's refusal.
-                self.ledger.record_rejection(result, record, output)
+                self._keep_report(result, record, output)
                 raise
         else:
-            self.ledger.record_rejection(result, record, output)
+            self._keep_report(result, record, output)
         return result
+
+    def _keep_report(self, result: VerificationResult, record: TransformationRecord, output: Artifact) -> None:
+        # A result for a record that cannot be digested has no proof, so the ledger cannot keep it as a report.
+        # Nothing is kept for it; the verdict built on it says the transformation was not committed.
+        if result.proof is None and _is_undigestable(record):
+            return
+        self.ledger.record_rejection(result, record, output)
 
     def reconstruct(self, artifact_id: str) -> Reconstruction:
         return self.reconstruction.reconstruct(self.ledger, artifact_id)

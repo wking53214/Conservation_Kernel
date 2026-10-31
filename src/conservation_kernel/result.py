@@ -121,7 +121,22 @@ def _issue_proof(result: VerificationResult, record: Any, output: Any, issuer: s
     """`result` with a proof that the verifier produced it, for this record and output, against registry `issuer`."""
     if issuer is None:
         return result
-    return replace(result, proof=(issuer, _mac(result, record, output, issuer)))
+    try:
+        mac = _mac(result, record, output, issuer)
+    except ValueError:
+        # A record holding a non-finite float cannot be digested, so no proof can cover it. The verdict stays
+        # unproven: a rejection is still a rejection, and the ledger takes nothing without a proof.
+        return result
+    return replace(result, proof=(issuer, mac))
+
+
+def _is_undigestable(record: Any) -> bool:
+    """True if the record cannot be digested (a non-finite float in it), so no result for it can carry a proof."""
+    try:
+        _digest(record.to_dict())
+    except ValueError:
+        return True
+    return False
 
 
 def _proof_issuer(result: VerificationResult, record: Any, output: Any) -> str | None:

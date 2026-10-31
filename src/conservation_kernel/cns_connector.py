@@ -106,15 +106,15 @@ One real input cannot be expressed: a non-finite float (NaN or infinity) in a
   so: the verdict is ``TERMINAL_BREACH``, it is *unbound* (empty
   ``subject_digest``, so ``cns.gate.unbound`` names it) and its reason says
   why. It is never ``PASS``, even if a caller hands ``to_cns_result`` an
-  accepted result for it.
+  accepted result for it. The verifier leaves such a result unproven, because
+  no proof can cover a record it cannot digest.
 * ``verify`` returns an *acceptance*. A matching declaration followed by a
   second declaration for the same subject and dimension that holds the
   non-finite value is accepted, because the verifier stops at the first match.
-  The kernel then commits it. The connector still fails closed, with the same
-  unbound ``TERMINAL_BREACH``, so here the CNS verdict and the ledger
-  disagree: the ledger holds an output this verdict refuses.
-  ``submit_to_cns`` says so in the reason. This is a kernel inconsistency the
-  connector surfaces and does not fix.
+  The result is unproven, so the ledger refuses to commit it. ``submit``
+  raises ``LedgerError`` and the connector returns the same unbound
+  ``TERMINAL_BREACH``, with the ledger's refusal in the reason. The CNS verdict
+  and the ledger agree.
 * ``verify`` itself raises ``ValueError`` (the declaration matches an observed
   change, and comparing it needs the canonical form). There is no kernel
   verdict to translate, so the connector lets that error propagate unchanged.
