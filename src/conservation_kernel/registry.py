@@ -49,6 +49,11 @@ class EvidenceRegistry:
         self._revocations: dict[str, tuple[RevocationEvent, str]] = {}
 
     @property
+    def evidence_guard(self) -> Callable[[EvidenceRecord], bool] | None:
+        """The guard this registry was built with, for a caller deciding whether it is one they trust. None if there is none."""
+        return self._evidence_guard
+
+    @property
     def has_evidence_guard(self) -> bool:
         """Whether adding evidence depends on a guard. Says nothing about what the guard will answer."""
         return self._evidence_guard is not None

@@ -1,9 +1,12 @@
-"""A root that states a fact, an observation, an authority or a canonical state may not cite evidence that is no longer active.
+"""A kernel can refuse a new root whose strong or canonical proposition cites evidence that is no longer active.
 
 The verifier already refuses a transformation whose strong proposition keeps inactive evidence (INACTIVE_EVIDENCE).
-Root admission is the other door into the ledger, and it checked that a cited record exists but not that it is still
-active, so a root could assert what a transformation could not. Admission now applies the same rule, with the same
-condition: strong epistemic status, any authority, or canonical state.
+Root admission checked that a cited record exists, not that it is active, so a root could assert what a transformation
+could not. A deployer turns the same rule on with `refuse_inactive_root_evidence=True`, the way `require_bounded` is
+turned on: off by default, so nothing changes until it is asked for.
+
+It applies to a root being registered now. It never applies when a snapshot is restored: a root admitted while its
+evidence was active stays admitted if the evidence is withdrawn later, and restoring it must not fail for that.
 """
 from __future__ import annotations
 
@@ -16,8 +19,8 @@ from conservation_kernel.enums import EvidenceKind
 from conservation_kernel.errors import RootAdmissionError
 
 
-def kernel_holding(*, active: bool) -> ConservationKernel:
-    kernel = ConservationKernel(allow_unguarded_roots=True)
+def kernel_holding(*, active: bool, refuse: bool = True) -> ConservationKernel:
+    kernel = ConservationKernel(allow_unguarded_roots=True, refuse_inactive_root_evidence=refuse)
     kernel.registry.add_evidence(EvidenceRecord(
         evidence_id="ev-1", subject_id="p0", kind=EvidenceKind.SOURCE_OBSERVATION, provided_by=Actor.system("tie"),
         active=active))
@@ -64,11 +67,22 @@ def test_the_refusal_names_the_proposition_and_the_record():
     assert any(reason.startswith("p0: ") and "['ev-1']" in reason for reason in reasons), reasons
 
 
-def test_a_snapshot_holding_such_a_root_no_longer_reverifies():
-    """The stated behaviour change: a root planted past admission (an older or hand-made snapshot) is re-admitted on
-    reload, and is now refused for the same reason a live registration is."""
-    from conservation_kernel.errors import SnapshotIntegrityError
+def test_it_is_off_by_default_so_an_existing_kernel_judges_roots_as_before():
+    kernel = kernel_holding(active=False, refuse=False)
+    assert kernel.admit_root(root_citing(EpistemicStatus.FACT)) == ()
+    assert ConservationKernel(allow_unguarded_roots=True).refuse_inactive_root_evidence is False
+
+
+def test_restoring_a_snapshot_never_applies_it_so_withdrawn_evidence_cannot_brick_a_ledger():
+    """A root admitted while its evidence was active stays admitted if the evidence is withdrawn afterwards. Restoring
+    it, even into a kernel that refuses such roots now, must succeed."""
     kernel = kernel_holding(active=False)
-    kernel.ledger.add_initial(root_citing(EpistemicStatus.FACT))
-    with pytest.raises(SnapshotIntegrityError, match="inactive evidence"):
-        ConservationKernel.from_snapshot(kernel.snapshot(), allow_unguarded_roots=True)
+    kernel.ledger.add_initial(root_citing(EpistemicStatus.FACT))  # stands for a root admitted before the withdrawal
+    restored = ConservationKernel.from_snapshot(kernel.snapshot(), allow_unguarded_roots=True,
+                                                refuse_inactive_root_evidence=True)
+    assert restored.refuse_inactive_root_evidence is True
+    assert restored.ledger.artifact("root:doc-1") is not None
+    with pytest.raises(RootAdmissionError, match="inactive"):
+        restored.register_root(root_citing(EpistemicStatus.FACT).__class__(
+            artifact_id="root:doc-2", content="Another invoice.", propositions=root_citing(EpistemicStatus.FACT).propositions,
+            producer=Actor.system("tie")))

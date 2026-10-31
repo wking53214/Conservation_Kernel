@@ -33,6 +33,11 @@ class ConservationLedger:
         self._verified_at: dict[str, str] = {}
 
     @property
+    def root_guard(self) -> Callable[[Artifact], bool] | None:
+        """The guard this ledger was built with, for a caller deciding whether it is one they trust. None if there is none."""
+        return self._root_guard
+
+    @property
     def has_root_guard(self) -> bool:
         """Whether adding an initial artifact depends on a guard. Says nothing about what the guard will answer."""
         return self._root_guard is not None

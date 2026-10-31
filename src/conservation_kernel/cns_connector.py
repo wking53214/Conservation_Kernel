@@ -553,14 +553,31 @@ class CnsRootAdmissionGate:
     any caller lets a FACT stand on a citation nobody vouched for. With the
     flag the gate refuses (``TERMINAL_BREACH``) a kernel built without an
     evidence guard. Default ``False``.
+
+    ``require_guard`` and ``require_evidence_guard`` ask whether a guard
+    exists, and a function that answers ``True`` to everything satisfies
+    them. ``accept_guard`` and ``accept_evidence_guard`` hand the kernel's own
+    guard to a predicate the roster supplies (``isinstance`` of the roster's
+    own guard class, for example); a guard it does not accept, a predicate that
+    raises, and an answer other than exactly ``True`` are each a
+    ``TERMINAL_BREACH``. Giving a predicate also requires that a guard exist.
+    Neither predicate can see what a guard will answer, only which guard it is,
+    and code willing to write a private name can still replace one.
     """
 
     name = ROOT_GATE_NAME
 
     def __init__(self, kernel: ConservationKernel, *, subject: str = DEFAULT_ROOT_SUBJECT,
-                 require_guard: bool = False, require_evidence_guard: bool = False) -> None:
+                 require_guard: bool = False, require_evidence_guard: bool = False,
+                 accept_guard: Callable[[Any], bool] | None = None,
+                 accept_evidence_guard: Callable[[Any], bool] | None = None) -> None:
         _cns_gate()  # fail here, at construction, not on first use
         _require_subject(subject)
+        for name, predicate in (("accept_guard", accept_guard), ("accept_evidence_guard", accept_evidence_guard)):
+            if predicate is not None and not callable(predicate):
+                raise ValueError(f"{name} must be a function that says whether a guard is one the roster accepts")
+        self._accept_guard = accept_guard
+        self._accept_evidence_guard = accept_evidence_guard
         self._kernel = kernel
         self._subject = subject
         self._require_guard = require_guard
@@ -569,6 +586,19 @@ class CnsRootAdmissionGate:
     @property
     def position(self) -> Any:
         return _cns_gate().GatePosition.ALPHA
+
+    @staticmethod
+    def _unaccepted(kind: str, guard: Any, accepts: Callable[[Any], bool] | None) -> tuple[str, ...]:
+        """Why the roster does not accept this kernel's guard, or nothing if it does or was not asked."""
+        if accepts is None:
+            return ()
+        if guard is None:
+            return (f"this kernel has no {kind} guard, so there is none for the roster to accept",)
+        try:
+            accepted = accepts(guard) is True
+        except Exception:  # a predicate that cannot answer never accepts
+            accepted = False
+        return () if accepted else (f"this kernel's {kind} guard is not one the roster accepts",)
 
     def check(self, candidate: object) -> Any:
         if not isinstance(candidate, Artifact):
@@ -582,6 +612,8 @@ class CnsRootAdmissionGate:
         if self._require_evidence_guard and not self._kernel.has_evidence_guard:
             reasons = (*reasons, "this kernel has no evidence guard, so its registry takes evidence from any "
                                  "caller and a root can cite a record nobody vouched for")
+        reasons = (*reasons, *self._unaccepted("root", self._kernel.root_guard, self._accept_guard),
+                   *self._unaccepted("evidence", self._kernel.evidence_guard, self._accept_evidence_guard))
         return admission_to_cns_result(reasons, candidate, subject=self._subject)
 
 

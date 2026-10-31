@@ -36,6 +36,7 @@ class ConservationKernel:
         allow_unguarded_roots: bool = False,
         clock: Callable[[], str] | None = None,
         evidence_guard: Callable[[EvidenceRecord], bool] | None = None,
+        refuse_inactive_root_evidence: bool = False,
     ) -> None:
         """`clock` returns the time the kernel decides at (ISO 8601 with offset). Every decision and root admission
         is stamped with it and judged as of it. It defaults to this machine's UTC clock; a deployment should hand in
@@ -53,11 +54,17 @@ class ConservationKernel:
         `evidence_guard` makes adding evidence depend on a permission the caller holds: the registry asks it before
         adding any evidence record, whether through `kernel.registry.add_evidence` or any other route to it. It is
         optional, and with none any caller may add evidence, as before. To guard a registry you pass in, build it with
-        `EvidenceRegistry(evidence_guard=...)`."""
+        `EvidenceRegistry(evidence_guard=...)`.
+
+        `refuse_inactive_root_evidence` makes `admit_root` refuse a new root whose fact, observation, authority or
+        canonical proposition cites evidence that is no longer active, the rule the verifier already applies to a
+        transformation. Off by default, so nothing changes until a deployer asks. It is never applied when a snapshot
+        is restored: a root admitted while its evidence was active stays admitted if the evidence is withdrawn later."""
         if root_guard is not None and ledger is not None:
             raise ValueError("pass the root guard to the ledger you supply, not to the kernel as well")
         if evidence_guard is not None and registry is not None:
             raise ValueError("pass the evidence guard to the registry you supply, not to the kernel as well")
+        self.refuse_inactive_root_evidence = bool(refuse_inactive_root_evidence)
         self._registry = registry or EvidenceRegistry(evidence_guard=evidence_guard)
         self.clock = clock or utc_now
         self.verifier = verifier or IndependentVerifier()
@@ -89,6 +96,16 @@ class ConservationKernel:
         return self.ledger.has_root_guard
 
     @property
+    def root_guard(self) -> Callable[[Artifact], bool] | None:
+        """The guard that decides whether a root may be registered, or None. Read it to judge whether it is one you trust."""
+        return self.ledger.root_guard
+
+    @property
+    def evidence_guard(self) -> Callable[[EvidenceRecord], bool] | None:
+        """The guard that decides whether evidence may be added, or None. Read it to judge whether it is one you trust."""
+        return self.registry.evidence_guard
+
+    @property
     def has_evidence_guard(self) -> bool:
         """Whether this kernel's registry adds evidence only with a guard's permission."""
         return self.registry.has_evidence_guard
@@ -99,6 +116,10 @@ class ConservationKernel:
                                   CanonicalState.REVOKED, CanonicalState.DELETED})
 
     def admit_root(self, artifact: Artifact, *, as_of: str | None = None) -> tuple[str, ...]:
+        """Reasons this artifact may not be registered as a root now; empty if it may. See `_admit_root`."""
+        return self._admit_root(artifact, as_of=as_of, restoring=False)
+
+    def _admit_root(self, artifact: Artifact, *, as_of: str | None, restoring: bool) -> tuple[str, ...]:
         """Reasons this artifact may not be registered as a root; empty if it may.
 
         The constitution constrains transitions, so a root is asserted. But an
@@ -117,7 +138,7 @@ class ConservationKernel:
             if missing:
                 reasons.append(f"{prop.proposition_id}: evidence_refs not in registry: {list(missing)}")
             inactive = self.registry.inactive_refs(prop.evidence_refs)
-            if inactive and (prop.epistemic_status in self.STRONG_EPISTEMIC or prop.authority is not AuthorityStatus.NONE
+            if self.refuse_inactive_root_evidence and not restoring and inactive and (prop.epistemic_status in self.STRONG_EPISTEMIC or prop.authority is not AuthorityStatus.NONE
                              or prop.canonical_state is CanonicalState.CANONICAL):
                 # The verifier's own rule (INACTIVE_EVIDENCE), applied at the other door into the ledger.
                 reasons.append(f"{prop.proposition_id}: strong/canonical root proposition cites inactive evidence: {list(inactive)}")
@@ -212,7 +233,8 @@ class ConservationKernel:
                       allow_unguarded_roots: bool = False,
                       clock: Callable[[], str] | None = None,
                       require_bounded: bool = False,
-                      evidence_guard: Callable[[EvidenceRecord], bool] | None = None) -> "ConservationKernel":
+                      evidence_guard: Callable[[EvidenceRecord], bool] | None = None,
+                      refuse_inactive_root_evidence: bool = False) -> "ConservationKernel":
         """A kernel continuing from `snapshot()`.
 
         The digest is checked first (corruption). Then, with `reverify`, every
@@ -239,7 +261,8 @@ class ConservationKernel:
         registry = EvidenceRegistry.restore(body.get("registry", {}), trusted_humans=trusted_humans,
                                             require_bounded=require_bounded, evidence_guard=evidence_guard)
         ledger = ConservationLedger.restore(body.get("ledger", {}), root_guard=root_guard)
-        kernel = cls(registry=registry, ledger=ledger, allow_unguarded_roots=allow_unguarded_roots, clock=clock)
+        kernel = cls(registry=registry, ledger=ledger, allow_unguarded_roots=allow_unguarded_roots, clock=clock,
+                     refuse_inactive_root_evidence=refuse_inactive_root_evidence)
         if reverify:
             kernel.reverify()
         return kernel
@@ -257,7 +280,7 @@ class ConservationKernel:
                 as_of = self._recorded(self.ledger.admitted_at(artifact.artifact_id), now, f"root {artifact.artifact_id}")
                 if self.ledger.admitted_at(artifact.artifact_id) is None:
                     unstamped_roots[artifact.artifact_id] = as_of
-                reasons = self.admit_root(artifact, as_of=as_of)
+                reasons = self._admit_root(artifact, as_of=as_of, restoring=True)
                 if reasons:
                     raise SnapshotIntegrityError(f"root {artifact.artifact_id} would not be admitted: " + "; ".join(reasons))
         for record in self.ledger.transformations():
