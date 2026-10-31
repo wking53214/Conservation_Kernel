@@ -137,6 +137,13 @@ class ConservationKernel:
             missing = self.registry.missing_refs(prop.evidence_refs)
             if missing:
                 reasons.append(f"{prop.proposition_id}: evidence_refs not in registry: {list(missing)}")
+            if prop.epistemic_status in self.STRONG_EPISTEMIC:
+                cited = [self.registry.evidence(ref) for ref in prop.evidence_refs if ref not in missing]
+                if cited and not any(item is not None and item.subject_id == prop.proposition_id for item in cited):
+                    # A root has no parents, so its own id is the only subject that counts, and "*" counts for none.
+                    reasons.append(f"{prop.proposition_id}: a root {prop.epistemic_status.value} must cite evidence about "
+                                   f"this proposition; {[item.evidence_id for item in cited if item is not None]} "
+                                   "support others")
             inactive = self.registry.inactive_refs(prop.evidence_refs)
             if self.refuse_inactive_root_evidence and not restoring and inactive and (prop.epistemic_status in self.STRONG_EPISTEMIC or prop.authority is not AuthorityStatus.NONE
                              or prop.canonical_state is CanonicalState.CANONICAL):
