@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 
@@ -119,7 +120,10 @@ def test_a_delegated_authorization_cannot_authorize_new_propositions_derived_fro
 # ---------------------------------------------------------------- 4. the gate can share the kernel's clock
 
 def test_the_cns_gate_handed_the_kernels_clock_agrees_with_the_kernel():
-    pytest.importorskip("cns.gate")
+    if os.environ.get("CONSERVATION_KERNEL_REQUIRE_CNS") == "1":  # CI: a missing cns is a failure, not a skip
+        import cns.gate  # noqa: F401
+    else:
+        pytest.importorskip("cns.gate", reason="cns not installed; run in an environment with conservation-kernel[cns]")
     from conservation_kernel.cns_connector import verify_to_cns
     base, registry = build_ground_truth()
     registry.add_authorization(_adoption_auth(valid_until=CLOSES))
