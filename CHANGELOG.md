@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `ConservationLedger.record_rejection(result, record, output)` takes only a result the verifier produced for that
+  record and output, the way `commit` does, and a ledger a kernel owns only one reached against its registry. It took
+  any `VerificationResult`, so a hand-written `PASS` could sit in the history beside the real verdicts (nothing decides
+  from reports, but an auditor reads them as what the verifier said). **Breaking:** the method now needs the record
+  and output; `submit` and the experiment pass them. Reports restored from a snapshot carry no proof and are history
+  only, as before.
 - `ConservationLedger.record_times` is now private (`_record_times`). It let any caller stamp an unstamped root or
   transformation with a time of their choosing, and a restore judges each as of its stamp, so a stamp in the past put
   history outside every revocation or expiry recorded after it. The kernel's own reload still stamps unstamped history

@@ -195,10 +195,10 @@ class ConservationKernel:
                 # the accepted result vanished with the exception (measured
                 # 2026-09-08), so a verification that occurred left no trace.
                 # Keep the report, then let the caller see the ledger's refusal.
-                self.ledger.record_rejection(result)
+                self.ledger.record_rejection(result, record, output)
                 raise
         else:
-            self.ledger.record_rejection(result)
+            self.ledger.record_rejection(result, record, output)
         return result
 
     def reconstruct(self, artifact_id: str) -> Reconstruction:

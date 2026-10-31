@@ -133,7 +133,17 @@ class ConservationLedger:
         if result.verified_at is not None:
             self._verified_at[record.transformation_id] = result.verified_at
 
-    def record_rejection(self, result: VerificationResult) -> None:
+    def record_rejection(self, result: VerificationResult, record: TransformationRecord, output: Artifact) -> None:
+        """Keep `result` as a report. Like `commit`, it takes only a result the verifier produced for exactly this
+        record and output (and, on a ledger a kernel owns, against that kernel's registry), so a verdict written by
+        hand cannot sit in the history beside the real ones. It may be a rejection or an accepted result the ledger
+        then refused to commit."""
+        issuer = _proof_issuer(result, record, output)
+        if issuer is None:
+            raise LedgerError("the result was not produced by the verifier for this record and output, "
+                              "so it is not kept as a report")
+        if self._issuer is not None and issuer != self._issuer:
+            raise LedgerError("the result was verified against a registry other than this ledger's kernel's")
         self._reports.append(result)
 
     def artifact(self, artifact_id: str) -> Artifact:
