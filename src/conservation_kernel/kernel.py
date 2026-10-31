@@ -58,10 +58,10 @@ class ConservationKernel:
             raise ValueError("pass the root guard to the ledger you supply, not to the kernel as well")
         if evidence_guard is not None and registry is not None:
             raise ValueError("pass the evidence guard to the registry you supply, not to the kernel as well")
-        self.registry = registry or EvidenceRegistry(evidence_guard=evidence_guard)
+        self._registry = registry or EvidenceRegistry(evidence_guard=evidence_guard)
         self.clock = clock or utc_now
         self.verifier = verifier or IndependentVerifier()
-        self.ledger = ledger or ConservationLedger(root_guard=root_guard)
+        self._ledger = ledger or ConservationLedger(root_guard=root_guard)
         if not self.ledger.has_root_guard and not allow_unguarded_roots:
             raise UnguardedKernelError(
                 "ConservationKernel built without a root_guard: it would register any root it admits, with no "
@@ -71,9 +71,21 @@ class ConservationKernel:
         self.reconstruction = ReconstructionEngine()
 
     @property
+    def registry(self) -> EvidenceRegistry:
+        """The evidence registry this kernel was built with. Read-only: replacing it would replace its evidence guard."""
+        return self._registry
+
+    @property
+    def ledger(self) -> ConservationLedger:
+        """The ledger this kernel was built with. Read-only: replacing it would replace its root guard."""
+        return self._ledger
+
+    @property
     def has_root_guard(self) -> bool:
         """Whether this kernel registers a root only with a guard's permission. A caller deciding whether to
-        trust this kernel with an approval can read this; it cannot be turned off after construction."""
+        trust this kernel with an approval can read this; it cannot be turned off through the kernel's public
+        interface after construction (the ledger is read-only). Code willing to write a private name can still
+        reach it: that is a limit of in-process checks, not something the kernel can prevent."""
         return self.ledger.has_root_guard
 
     @property
