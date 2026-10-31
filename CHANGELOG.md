@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `ConservationKernel.submit` refuses (`LedgerError`) an input artifact that shares an id with a ledger artifact but is
+  not that artifact. It used to verify whatever "before" the caller handed in, so a doctored copy of a registered root
+  (an INFERENCE shown as a FACT with real evidence) let a FACT child of an INFERENCE root into the ledger, which the
+  next restore then refused to reload. Inputs not in the ledger are unchanged (the commit still refuses them).
+  `ConservationLedger.get(artifact_id)` returns the held artifact or None.
 - A kernel now refuses to be built without an evidence guard: `ConservationKernel(...)` and `from_snapshot(...)` raise
   `UnguardedKernelError` unless `evidence_guard=...` is given (or the registry you pass in has one) or
   `allow_unguarded_evidence=True` says that is deliberate, mirroring `allow_unguarded_roots`. With a root guard but no

@@ -179,6 +179,12 @@ class ConservationKernel:
         output: Artifact,
         record: TransformationRecord,
     ) -> VerificationResult:
+        # An input that shares an id with a ledger artifact must be that artifact. Otherwise the verifier would judge
+        # a "before" the caller wrote, and the ledger would record a child of a parent that never looked like that.
+        for item in (input_artifacts,) if isinstance(input_artifacts, Artifact) else tuple(input_artifacts):
+            held = self.ledger.get(item.artifact_id)
+            if held is not None and held != item:
+                raise LedgerError(f"input artifact {item.artifact_id} is not the artifact the ledger holds under that id")
         result = self.verifier.verify(input_artifacts, output, record, self.registry.at(self._now()))
         if result.accepted:
             try:

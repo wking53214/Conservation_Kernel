@@ -137,6 +137,10 @@ class ConservationLedger:
     def artifact(self, artifact_id: str) -> Artifact:
         return self._artifacts[artifact_id]
 
+    def get(self, artifact_id: str) -> Artifact | None:
+        """The artifact with this id, or None if the ledger holds none."""
+        return self._artifacts.get(artifact_id)
+
     def artifacts(self) -> tuple[Artifact, ...]:
         return tuple(self._artifacts.values())
 
