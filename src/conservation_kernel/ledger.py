@@ -21,7 +21,8 @@ class ConservationLedger:
     def __init__(self, *, root_guard: Callable[[Artifact], bool] | None = None) -> None:
         """`root_guard`, if given, is asked before any initial artifact is added, and the artifact is added only
         if it answers True. It is the caller's own permission check (the kernel imports nothing to supply one); a
-        guard that raises or answers anything but True refuses. Rebuilding a ledger from a snapshot does not ask it."""
+        guard that raises or answers anything but True refuses. If it has `commit` and `abort` methods it is told
+        which happened after a yes: `commit()` once the root is in, `abort()` if adding it raised. Rebuilding a ledger from a snapshot does not ask it."""
         self._root_guard = root_guard
         self._artifacts: dict[str, Artifact] = {}
         self._transformations: dict[str, TransformationRecord] = {}
@@ -54,9 +55,24 @@ class ConservationLedger:
                 permitted = False
             if not permitted:
                 raise RootAdmissionError("root refused: the root guard did not authorize this artifact")
-        self._add_artifact(artifact)
-        if admitted_at is not None:
-            self._admitted_at[artifact.artifact_id] = admitted_at
+        try:
+            self._add_artifact(artifact)
+            if admitted_at is not None:
+                self._admitted_at[artifact.artifact_id] = admitted_at
+        except Exception:
+            self._tell_root_guard("abort")  # a yes was given and nothing was written: the guard may give it back
+            raise
+        self._tell_root_guard("commit")
+
+    def _tell_root_guard(self, how: str) -> None:
+        """Tell a root guard that offers `commit` and `abort` how the write it permitted ended. A guard with neither is
+        left alone, and one that raises while being told does not hide the write or its failure."""
+        settle = getattr(self._root_guard, how, None)
+        if callable(settle):
+            try:
+                settle()
+            except Exception:  # noqa: BLE001 - the write has happened or failed; the guard's own trouble stays its own
+                pass
 
     def admitted_at(self, artifact_id: str) -> str | None:
         """When the kernel admitted this root, or None if it was added without a time (or before stamps)."""
