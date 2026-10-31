@@ -758,23 +758,24 @@ def test_a_non_finite_duplicate_declaration_the_verifier_accepts_is_still_an_unb
     assert "ledger" not in verdict.reason
 
 
-def test_submit_to_cns_says_when_the_ledger_holds_what_the_verdict_refuses():
+def test_an_accepted_non_finite_declaration_is_refused_by_the_ledger_and_the_verdict_says_so():
+    """The verifier cannot stamp a record it cannot digest, so the ledger never takes its accepted result. The kernel
+    fails closed: nothing is committed or kept, and the verdict says the ledger refused it."""
     base, output, record, registry = _accepted_with_a_duplicate_non_finite_declaration()
     native_kernel = _twin(base, registry)
     connected_kernel = _twin(base, registry)
-    assert native_kernel.submit(base, output, record).accepted
+    with pytest.raises(LedgerError, match="not produced by the verifier"):
+        native_kernel.submit(base, output, record)
 
     verdict = submit_to_cns(connected_kernel, base, output, record)
     assert verdict.outcome is BREACH
     assert not verdict.bound()
-    assert "committed the output to the ledger" in verdict.reason
-    # The kernel did exactly what a direct submit does, and holds the output.
+    assert "ledger refused to commit" in verdict.reason
+    assert "committed the output to the ledger" not in verdict.reason
     for kernel in (native_kernel, connected_kernel):
-        assert [t.transformation_id for t in kernel.ledger.transformations()] == [
-            record.transformation_id
-        ]
-        assert output.artifact_id in [a.artifact_id for a in kernel.ledger.artifacts()]
-        assert len(kernel.ledger.reports()) == 1
+        assert kernel.ledger.transformations() == ()
+        assert output.artifact_id not in [a.artifact_id for a in kernel.ledger.artifacts()]
+        assert kernel.ledger.reports() == ()
 
 
 def test_a_rejection_that_cannot_be_digested_does_not_claim_the_ledger_holds_it():

@@ -81,8 +81,8 @@ Measured 2026-10-31 at main `c51a246`, Python 3.13.
 | Version | 0.3.0 (`pyproject.toml` and `__version__`). `ConservationKernel.version` still reads 0.2.0 and is what snapshots record as `kernel_version`; the two have not been brought together. |
 | Tag and GitHub Release | None yet. The changelog has no 0.2.0 or 0.3.0 heading; both are under Unreleased. Tagging is the owner's decision. |
 | CI on main | Green (tests on Python 3.11 and 3.12, with and without CNS, plus ruff 0.15.22) |
-| Tests | Without CNS importable: 250 passed, 2 skipped, 0 failed (`python3 -m pytest -q` with `cns`, `cns_interop` and `cns_composition` blocked). With CNS installed: 389 passed, 7 failed, 0 skipped (396 collected). Not re-measured today: CI status, and Python 3.11 and 3.12 results. |
-| Known failing tests | All 7 are in `tests/test_cns_connector.py` and fail identically against CNS tag v2.3.0 (the pin) and against a newer CNS checkout (v2.3.0 plus 59 commits). Six raise `ValueError: non-finite floats are not supported in canonical representations` (the `nan`, `inf` and `-inf` non-finite declaration tests, the duplicate non-finite declaration test, `test_submit_to_cns_says_when_the_ledger_holds_what_the_verdict_refuses`, and `test_a_rejection_that_cannot_be_digested_does_not_claim_the_ledger_holds_it`). The seventh, the root-gate test `[forged and derived]`, sees a `LedgerError` where it expects a `RootAdmissionError`. They pre-exist this README change, and the cause is not diagnosed here. |
+| Tests | Without CNS importable: 250 passed, 2 skipped, 0 failed (`python3 -m pytest -q` with `cns`, `cns_interop` and `cns_composition` blocked). With CNS installed: 396 passed, 0 failed, 0 skipped (396 collected), measured on Python 3.11, 3.12 and 3.13 on 2026-10-31. Not re-measured: GitHub Actions status. |
+| Known failing tests | None with CNS installed. The seven failures recorded before 2026-10-31 came from the verifier's proof stamp crashing on records holding NaN or infinity (six tests) and from `add_initial` checking parents before root admission (one test); both are fixed on this branch. |
 | CNS pin | `pyproject.toml` pins the optional `cns` extra to tag v2.3.0 (an earlier version of this README, and the comment in `pyproject.toml`, still say v2.2.0). |
 
 ### Which doors write, and what protects each
@@ -249,14 +249,15 @@ A `DeclaredChange` holding NaN or an infinity cannot be digested by the kernel
 or by CNS, and the connector never turns it into a `PASS`:
 
 - The kernel rejects it: the verdict is `TERMINAL_BREACH` and unbound
-  (`cns.gate.unbound` names it).
+  (`cns.gate.unbound` names it). The verifier cannot stamp a record it cannot
+  digest, so the result is unproven and nothing is kept as a report.
 - The kernel accepts it. A matching declaration followed by a second
   declaration for the same subject and dimension with the non-finite value is
-  accepted, because the verifier stops at the first match, and the kernel
-  commits it. The verdict is still the unbound `TERMINAL_BREACH`, so here the
-  CNS verdict and the ledger disagree, and `submit_to_cns` says so in the
-  reason. That is a kernel inconsistency the connector surfaces and does not
-  fix.
+  accepted by the verifier, because it stops at the first match. But the
+  result has no proof, so the ledger refuses to commit it: `submit` raises
+  `LedgerError`, nothing is committed or kept, and the verdict is the unbound
+  `TERMINAL_BREACH`. `submit_to_cns` reports the refusal in the reason, so the
+  CNS verdict and the ledger agree.
 - The kernel raises `ValueError` while verifying. There is no verdict to
   translate, so the connector propagates the error unchanged.
 

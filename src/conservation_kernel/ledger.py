@@ -51,16 +51,17 @@ class ConservationLedger:
         return self._root_guard is not None
 
     def add_initial(self, artifact: Artifact, *, admitted_at: str | None = None) -> None:
-        if artifact.parent_artifact_ids:
-            raise LedgerError("an initial artifact cannot already have parents")
         if artifact.artifact_id in self._artifacts:
             raise LedgerError(f"duplicate artifact ID {artifact.artifact_id}")
         if self._admit_root is not None:
-            # Whatever door a root comes through, it is held to what the registry backs. Asked before the guard, so a
-            # one-use permission is not spent on a root that could never be admitted.
+            # Whatever door a root comes through, it is held to what the registry backs. Asked before the parent check
+            # and the guard, so a forged root is reported as a root refusal, and a one-use permission is not spent on a
+            # root that could never be admitted.
             reasons = self._admit_root(artifact, as_of=admitted_at)
             if reasons:
                 raise RootAdmissionError("root refused: " + "; ".join(reasons))
+        if artifact.parent_artifact_ids:
+            raise LedgerError("an initial artifact cannot already have parents")
         if self._root_guard is not None:
             try:
                 permitted = self._root_guard(artifact) is True
