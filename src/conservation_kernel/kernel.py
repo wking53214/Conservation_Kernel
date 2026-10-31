@@ -293,7 +293,7 @@ class ConservationKernel:
                     f"transformation {record.transformation_id} does not re-verify: "
                     + "; ".join(f"{v.code}" for v in result.violations)
                 )
-        self.ledger.record_times(admitted=unstamped_roots, verified=unstamped_transformations)
+        self.ledger._record_times(admitted=unstamped_roots, verified=unstamped_transformations)
 
     @staticmethod
     def _recorded(stamp: str | None, now: str, what: str) -> str:

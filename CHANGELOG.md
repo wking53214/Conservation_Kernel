@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `ConservationLedger.record_times` is now private (`_record_times`). It let any caller stamp an unstamped root or
+  transformation with a time of their choosing, and a restore judges each as of its stamp, so a stamp in the past put
+  history outside every revocation or expiry recorded after it. The kernel's own reload still stamps unstamped history
+  once, with its clock. **Breaking:** code that called `ledger.record_times` has no replacement; times come from the
+  kernel's clock.
 - `ConservationKernel.submit` refuses (`LedgerError`) an input artifact that shares an id with a ledger artifact but is
   not that artifact. It used to verify whatever "before" the caller handed in, so a doctored copy of a registered root
   (an INFERENCE shown as a FACT with real evidence) let a FACT child of an INFERENCE root into the ledger, which the

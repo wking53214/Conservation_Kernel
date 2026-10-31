@@ -83,9 +83,11 @@ class ConservationLedger:
         reported but refused by the ledger, and must not move this transformation's time."""
         return self._verified_at.get(transformation_id)
 
-    def record_times(self, *, admitted: dict[str, str] | None = None, verified: dict[str, str] | None = None) -> None:
+    def _record_times(self, *, admitted: dict[str, str] | None = None, verified: dict[str, str] | None = None) -> None:
         """Give a time to history that has none (roots or committed transformations written before times existed,
-        or straight to the ledger). A time already recorded is never replaced."""
+        or straight to the ledger). A time already recorded is never replaced. Not public: a restore judges each item
+        as of its stamp, so a stamp a caller chose could put history outside a later revocation or expiry. Only the
+        kernel's own reload, which stamps with its clock, calls this."""
         for artifact_id, moment in (admitted or {}).items():
             if artifact_id not in self._artifacts:
                 raise LedgerError(f"no artifact {artifact_id} to record a time for")
