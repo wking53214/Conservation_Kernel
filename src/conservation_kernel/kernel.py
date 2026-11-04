@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+
 from collections.abc import Callable, Sequence
 
 from .enums import AuthorityStatus, CanonicalState, EpistemicStatus, TransitionKind
@@ -13,6 +15,16 @@ from .reconstruction import Reconstruction, ReconstructionEngine
 from .registry import EvidenceRegistry
 from .result import VerificationResult, _is_undigestable
 from .verifier import IndependentVerifier
+
+
+#: The evidence detail key that carries the SHA-256 of the statement the evidence records. A proposition that cites
+#: such a record must say exactly that statement: its text must hash to this value (see `admit_root`).
+STATEMENT_DIGEST_KEY = "statement_sha256"
+
+
+def statement_digest(text: str) -> str:
+    """SHA-256 of a statement's UTF-8 text: the value an evidence record's STATEMENT_DIGEST_KEY holds."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 class ConservationKernel:
@@ -129,6 +141,11 @@ class ConservationKernel:
             missing = self.registry.missing_refs(prop.evidence_refs)
             if missing:
                 reasons.append(f"{prop.proposition_id}: evidence_refs not in registry: {list(missing)}")
+            for ref in prop.evidence_refs:
+                record = self.registry.evidence(ref)
+                bound = None if record is None else record.detail.get(STATEMENT_DIGEST_KEY)
+                if bound is not None and str(bound) != statement_digest(prop.text):
+                    reasons.append(f"{prop.proposition_id}: its text is not the statement of evidence {ref}, which it cites")
             dangling = tuple(ref for ref in prop.authorization_refs if self.registry.authorization(ref) is None)
             if dangling:
                 reasons.append(f"{prop.proposition_id}: authorization_refs not in registry: {list(dangling)}")

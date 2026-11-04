@@ -138,7 +138,7 @@ from typing import Any
 
 from .errors import LedgerError
 from .events import TransformationRecord
-from .kernel import ConservationKernel
+from .kernel import STATEMENT_DIGEST_KEY, ConservationKernel
 from .ledger import ConservationLedger
 from .model import Artifact
 from .registry import EvidenceRegistry
@@ -542,6 +542,10 @@ class CnsRootAdmissionGate:
     ``GateResult``. It does not register the root;
     ``ConservationKernel.register_root`` does.
 
+    ``require_statement_binding=True`` refuses a root that cites evidence carrying no statement digest, so a
+    proposition's text can always be checked against the statement it cites. Default ``False``. (A digest that is
+    present and does not match the text is always refused, by ``admit_root``.)
+
     With ``require_guard=True`` the gate also refuses (``TERMINAL_BREACH``) any
     kernel built without a root guard. An approval for a root is only worth
     something if the kernel it was issued for will not register a root without
@@ -558,13 +562,15 @@ class CnsRootAdmissionGate:
     name = ROOT_GATE_NAME
 
     def __init__(self, kernel: ConservationKernel, *, subject: str = DEFAULT_ROOT_SUBJECT,
-                 require_guard: bool = False, require_evidence_guard: bool = False) -> None:
+                 require_guard: bool = False, require_evidence_guard: bool = False,
+                 require_statement_binding: bool = False) -> None:
         _cns_gate()  # fail here, at construction, not on first use
         _require_subject(subject)
         self._kernel = kernel
         self._subject = subject
         self._require_guard = require_guard
         self._require_evidence_guard = require_evidence_guard
+        self._require_statement_binding = require_statement_binding
 
     @property
     def position(self) -> Any:
@@ -582,6 +588,13 @@ class CnsRootAdmissionGate:
         if self._require_evidence_guard and not self._kernel.has_evidence_guard:
             reasons = (*reasons, "this kernel has no evidence guard, so its registry takes evidence from any "
                                  "caller and a root can cite a record nobody vouched for")
+        if self._require_statement_binding:
+            unbound = sorted({ref for prop in candidate.propositions for ref in prop.evidence_refs
+                              if (record := self._kernel.registry.evidence(ref)) is not None
+                              and STATEMENT_DIGEST_KEY not in record.detail})
+            if unbound:
+                reasons = (*reasons, "cites evidence that carries no statement digest, so its text cannot be bound "
+                                     f"to the statement it records: {unbound}")
         return admission_to_cns_result(reasons, candidate, subject=self._subject)
 
 
