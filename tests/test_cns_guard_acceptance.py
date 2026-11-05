@@ -37,7 +37,7 @@ def test_the_kernel_hands_out_the_guards_it_was_built_with_and_none_when_it_has_
     root_guard, evidence_guard = OurGuard(), OurGuard()
     kernel = ConservationKernel(root_guard=root_guard, evidence_guard=evidence_guard)
     assert kernel.root_guard is root_guard and kernel.evidence_guard is evidence_guard
-    bare = ConservationKernel(allow_unguarded_roots=True)
+    bare = ConservationKernel(allow_unguarded_roots=True, allow_unguarded_evidence=True)
     assert bare.root_guard is None and bare.evidence_guard is None
 
 
@@ -63,7 +63,7 @@ def test_each_acceptance_is_judged_on_its_own():
 
 
 def test_asking_to_accept_a_guard_also_refuses_a_kernel_with_none():
-    kernel = ConservationKernel(allow_unguarded_roots=True)
+    kernel = ConservationKernel(allow_unguarded_roots=True, allow_unguarded_evidence=True)
     result = CnsRootAdmissionGate(kernel, accept_guard=ours, accept_evidence_guard=ours).check(guard_root())
     assert result.outcome.value == "terminal_breach"
     assert "no root guard" in result.reason and "no evidence guard" in result.reason
@@ -80,9 +80,9 @@ def test_a_predicate_that_raises_or_answers_loosely_never_accepts():
 
 def test_a_predicate_that_is_not_callable_is_refused_at_construction():
     with pytest.raises(ValueError, match="accept_guard"):
-        CnsRootAdmissionGate(ConservationKernel(allow_unguarded_roots=True), accept_guard="OurGuard")
+        CnsRootAdmissionGate(ConservationKernel(allow_unguarded_roots=True, allow_unguarded_evidence=True), accept_guard="OurGuard")
 
 
 def test_without_the_new_arguments_the_gate_judges_as_before():
-    kernel = ConservationKernel(root_guard=lambda a: True)
+    kernel = ConservationKernel(root_guard=lambda a: True, allow_unguarded_evidence=True)
     assert CnsRootAdmissionGate(kernel).check(guard_root()).outcome.value == "pass"
