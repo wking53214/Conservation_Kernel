@@ -113,7 +113,7 @@ def test_the_transformers_own_timestamp_cannot_extend_an_authorization():
     base, registry = build_ground_truth()
     registry.add_authorization(_adoption_auth(valid_until=CLOSES))
     clock = _Clock(INSIDE)
-    k = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=clock)
+    k = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=clock, allow_unguarded_evidence=True)
     k.register_root(base)
     clock.now = AFTER
     output, record = _adoption(registry, base, created_at=INSIDE)      # claims to be from inside the window
@@ -124,12 +124,12 @@ def test_a_lineage_accepted_inside_the_window_still_reloads_after_it_closes(tmp_
     base, registry = build_ground_truth()
     registry.add_authorization(_adoption_auth(valid_from=OPENS, valid_until=CLOSES))
     clock = _Clock(INSIDE)
-    k = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=clock)
+    k = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=clock, allow_unguarded_evidence=True)
     k.register_root(base)
     output, record = _adoption(registry, base)
     assert k.submit(base, output, record).accepted
     k.save(tmp_path / "kernel.json")
-    restored = ConservationKernel.load(tmp_path / "kernel.json", allow_unguarded_roots=True, clock=_Clock(AFTER))
+    restored = ConservationKernel.load(tmp_path / "kernel.json", allow_unguarded_roots=True, clock=_Clock(AFTER), allow_unguarded_evidence=True)
     assert restored.reconstruct(output.artifact_id).transformation_ids_in_order == ("tx-adopt",)
 
 
@@ -151,7 +151,7 @@ def _root_auth(**window):
 def test_a_root_claim_whose_authorization_has_ended_is_refused():
     registry = EvidenceRegistry()
     registry.add_authorization(_root_auth(valid_until=CLOSES))
-    k = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=_Clock(AFTER))
+    k = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=_Clock(AFTER), allow_unguarded_evidence=True)
     with pytest.raises(RootAdmissionError, match="no authorization for this proposition"):
         k.register_root(_authoritative_root())
 
@@ -159,10 +159,10 @@ def test_a_root_claim_whose_authorization_has_ended_is_refused():
 def test_a_root_admitted_inside_the_window_still_reloads_after_it_closes(tmp_path):
     registry = EvidenceRegistry()
     registry.add_authorization(_root_auth(valid_until=CLOSES))
-    k = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=_Clock(INSIDE))
+    k = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=_Clock(INSIDE), allow_unguarded_evidence=True)
     k.register_root(_authoritative_root())
     k.save(tmp_path / "kernel.json")
-    restored = ConservationKernel.load(tmp_path / "kernel.json", allow_unguarded_roots=True, clock=_Clock(AFTER))
+    restored = ConservationKernel.load(tmp_path / "kernel.json", allow_unguarded_roots=True, clock=_Clock(AFTER), allow_unguarded_evidence=True)
     assert [a.artifact_id for a in restored.ledger.artifacts()] == ["root-claim"]
 
 
@@ -191,8 +191,8 @@ def test_a_registry_that_requires_an_end_refuses_an_open_ended_authorization(tmp
         strict.add_authorization(_adoption_auth())
     strict.add_authorization(_adoption_auth(valid_until=CLOSES))
 
-    lax = ConservationKernel(allow_unguarded_roots=True, registry=EvidenceRegistry())
+    lax = ConservationKernel(allow_unguarded_roots=True, registry=EvidenceRegistry(), allow_unguarded_evidence=True)
     lax.registry.add_authorization(_root_auth())
     lax.save(tmp_path / "kernel.json")
     with pytest.raises(InvalidEvent, match="end"):
-        ConservationKernel.load(tmp_path / "kernel.json", allow_unguarded_roots=True, require_bounded=True)
+        ConservationKernel.load(tmp_path / "kernel.json", allow_unguarded_roots=True, require_bounded=True, allow_unguarded_evidence=True)

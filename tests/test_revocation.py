@@ -35,7 +35,7 @@ def _kernel(now):
     base, registry = build_ground_truth()
     registry.add_authorization(_adoption_auth())
     clock = _Clock(now)
-    k = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=clock)
+    k = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=clock, allow_unguarded_evidence=True)
     k.register_root(base)
     return k, clock, base, registry
 
@@ -56,7 +56,7 @@ def test_a_decision_made_before_the_revocation_still_reloads_after_it(tmp_path):
     clock.now = T2
     k.revoke(_revoke())
     k.save(tmp_path / "kernel.json")
-    restored = ConservationKernel.load(tmp_path / "kernel.json", allow_unguarded_roots=True, clock=_Clock(T3))
+    restored = ConservationKernel.load(tmp_path / "kernel.json", allow_unguarded_roots=True, clock=_Clock(T3), allow_unguarded_evidence=True)
     assert restored.reconstruct(output.artifact_id).transformation_ids_in_order == ("tx-adopt",)
     assert [r.revocation_id for r in restored.registry.revocations_of("auth-adopt")] == ["rev-1"]
 
@@ -123,7 +123,7 @@ def test_a_root_claim_whose_authorization_was_revoked_is_refused():
         transition_kind=TransitionKind.AUTHORITY_ESCALATION, from_value="NONE", to_value="HUMAN_AUTHORIZED",
         reason="approved"))
     clock = _Clock(T1)
-    k = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=clock)
+    k = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=clock, allow_unguarded_evidence=True)
     k.revoke(_revoke(target="auth-root", by=Actor.human("approver")))
     clock.now = T2
     p = Proposition("p-claim", "Deploy to production.", EpistemicStatus.DECISION, OriginStatus.MACHINE_ORIGINATED,

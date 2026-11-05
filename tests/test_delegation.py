@@ -65,7 +65,7 @@ def test_a_delegated_authorization_works_end_to_end_through_the_kernel():
     registry.trusted_humans = frozenset({"lead", "researcher"})      # "researcher" signed the fixture's own
     registry.add_delegation(_delegation())
     registry.add_authorization(_auth())
-    k = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=_Clock(T1))
+    k = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=_Clock(T1), allow_unguarded_evidence=True)
     k.register_root(base)
     output, record = _adoption(registry, base)
     assert k.submit(base, output, record).accepted
@@ -145,7 +145,7 @@ def test_a_lineage_accepted_under_a_delegation_still_reloads_after_the_delegatio
     registry.add_delegation(_delegation())
     registry.add_authorization(_auth())
     clock = _Clock(T1)
-    k = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=clock)
+    k = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=clock, allow_unguarded_evidence=True)
     k.register_root(base)
     output, record = _adoption(registry, base)
     assert k.submit(base, output, record).accepted
@@ -154,7 +154,7 @@ def test_a_lineage_accepted_under_a_delegation_still_reloads_after_the_delegatio
                              reason="role ended"))
     k.save(tmp_path / "kernel.json")
     restored = ConservationKernel.load(tmp_path / "kernel.json", allow_unguarded_roots=True, trusted_humans={"lead", "researcher"},
-                                       clock=_Clock(T3))
+                                       clock=_Clock(T3), allow_unguarded_evidence=True)
     assert restored.reconstruct(output.artifact_id).transformation_ids_in_order == ("tx-adopt",)
     assert restored.registry.at(T3).authorization("auth-adopt") is None
 

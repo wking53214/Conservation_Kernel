@@ -13,7 +13,7 @@ from conservation_kernel.enums import EvidenceKind
 
 
 def kernel_with_evidence_about(subject: str) -> ConservationKernel:
-    kernel = ConservationKernel(allow_unguarded_roots=True)
+    kernel = ConservationKernel(allow_unguarded_evidence=True, allow_unguarded_roots=True)
     kernel.registry.add_evidence(EvidenceRecord(evidence_id="ev-1", subject_id=subject, kind=EvidenceKind.SOURCE_OBSERVATION,
                                                 provided_by=Actor.system("tie")))
     return kernel
@@ -71,7 +71,11 @@ def test_a_snapshot_holding_such_a_root_does_not_restore():
     import pytest
 
     from conservation_kernel.errors import SnapshotIntegrityError
-    kernel = kernel_with_evidence_about("p0")
-    kernel.ledger.add_initial(root_with("p7", EpistemicStatus.FACT))  # planted past admission
+    from conservation_kernel.model import _digest, canonical_json
+    kernel = kernel_with_evidence_about("p7")
+    kernel.ledger.add_initial(root_with("p7", EpistemicStatus.FACT))  # admitted: ev-1 is about p7
+    snapshot = kernel.snapshot()
+    snapshot["registry"]["evidence"][0]["subject_id"] = "p0"  # a ledger written by hand: the evidence is about another
+    snapshot["snapshot_digest"] = _digest(canonical_json({k: v for k, v in snapshot.items() if k != "snapshot_digest"}))
     with pytest.raises(SnapshotIntegrityError, match="about this proposition"):
-        ConservationKernel.from_snapshot(kernel.snapshot(), allow_unguarded_roots=True)
+        ConservationKernel.from_snapshot(snapshot, allow_unguarded_roots=True, allow_unguarded_evidence=True)

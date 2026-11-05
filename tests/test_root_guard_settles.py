@@ -35,14 +35,14 @@ class Settling:
 
 def test_a_root_that_goes_in_tells_the_guard_to_commit():
     guard = Settling()
-    kernel = ConservationKernel(root_guard=guard)
+    kernel = ConservationKernel(allow_unguarded_evidence=True, root_guard=guard)
     kernel.register_root(root())
     assert guard.told == ["commit"]
 
 
 def test_a_root_the_ledger_cannot_add_tells_the_guard_to_abort(monkeypatch):
     guard = Settling()
-    kernel = ConservationKernel(root_guard=guard)
+    kernel = ConservationKernel(allow_unguarded_evidence=True, root_guard=guard)
 
     def fails(artifact):
         raise RuntimeError("the ledger could not take it")
@@ -54,14 +54,14 @@ def test_a_root_the_ledger_cannot_add_tells_the_guard_to_abort(monkeypatch):
 
 def test_a_refusal_by_the_guard_is_not_a_write_and_tells_it_nothing():
     guard = Settling(answer=False)
-    kernel = ConservationKernel(root_guard=guard)
+    kernel = ConservationKernel(allow_unguarded_evidence=True, root_guard=guard)
     with pytest.raises(RootAdmissionError, match="root guard"):
         kernel.register_root(root())
     assert guard.told == []
 
 
 def test_a_guard_with_neither_method_works_as_before():
-    kernel = ConservationKernel(root_guard=lambda artifact: True)
+    kernel = ConservationKernel(allow_unguarded_evidence=True, root_guard=lambda artifact: True)
     kernel.register_root(root())
     assert kernel.ledger.artifact("root:doc-1") is not None
 
@@ -70,6 +70,6 @@ def test_a_guard_whose_settling_raises_does_not_hide_the_write_or_its_failure(mo
     class Broken(Settling):
         def commit(self):
             raise RuntimeError("cannot settle")
-    kernel = ConservationKernel(root_guard=Broken())
+    kernel = ConservationKernel(allow_unguarded_evidence=True, root_guard=Broken())
     kernel.register_root(root())
     assert kernel.ledger.artifact("root:doc-1") is not None

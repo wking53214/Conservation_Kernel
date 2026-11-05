@@ -33,7 +33,7 @@ class _Clock:
 
 
 def _lineage(clock):
-    k = ConservationKernel(allow_unguarded_roots=True, clock=clock)
+    k = ConservationKernel(allow_unguarded_roots=True, clock=clock, allow_unguarded_evidence=True)
     p = Proposition("p-in", "Sensor reading 42.", EpistemicStatus.INFERENCE, OriginStatus.MACHINE_ORIGINATED)
     root = Artifact("in-1", "sensor", (p,), Actor("sensor", ActorKind.SYSTEM))
     k.register_root(root)
@@ -76,7 +76,7 @@ def test_the_stamps_survive_a_snapshot_and_reverify_uses_them(tmp_path):
             seen.append(registry.as_of)
             return super().verify(input_artifacts, output, record, registry)
 
-    restored = ConservationKernel.load(tmp_path / "kernel.json", allow_unguarded_roots=True, reverify=False)
+    restored = ConservationKernel.load(tmp_path / "kernel.json", allow_unguarded_roots=True, reverify=False, allow_unguarded_evidence=True)
     restored.verifier = _Spy()
     restored.reverify()
     assert seen == [T2]
@@ -103,7 +103,7 @@ def test_a_snapshot_written_before_stamps_existed_still_restores(tmp_path):
     path = tmp_path / "old.json"
     path.write_text(json.dumps(body))
     reloaded_at = "2026-10-03T09:00:00+00:00"
-    restored = ConservationKernel.load(path, allow_unguarded_roots=True, clock=_Clock(reloaded_at))
+    restored = ConservationKernel.load(path, allow_unguarded_roots=True, clock=_Clock(reloaded_at), allow_unguarded_evidence=True)
     # Judged as of the reload, and given that time once, so a revocation recorded later cannot reach back over it.
     assert restored.ledger.verified_at("t-1") == reloaded_at and restored.ledger.admitted_at("in-1") == reloaded_at
     assert restored.reconstruct("out-1").transformation_ids_in_order == ("t-1",)

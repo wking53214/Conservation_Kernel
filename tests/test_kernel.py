@@ -5,7 +5,7 @@ from conservation_kernel.enums import VerificationStatus
 
 def test_public_kernel_facade_commits_only_accepted_transformations():
     artifact, registry = build_ground_truth()
-    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry)
+    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry, allow_unguarded_evidence=True)
     kernel.register_root(artifact)
     output, record = legitimate_transformation(artifact, 1)
 

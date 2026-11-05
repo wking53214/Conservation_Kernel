@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import pytest
 
+from conservation_kernel.model import _digest, canonical_json
 from conservation_kernel import (
     Actor, Artifact, ConservationKernel, EpistemicStatus, EvidenceRecord, OriginStatus, Proposition,
 )
@@ -20,7 +21,7 @@ from conservation_kernel.errors import RootAdmissionError
 
 
 def kernel_holding(*, active: bool, refuse: bool = True) -> ConservationKernel:
-    kernel = ConservationKernel(allow_unguarded_roots=True, refuse_inactive_root_evidence=refuse)
+    kernel = ConservationKernel(allow_unguarded_evidence=True, allow_unguarded_roots=True, refuse_inactive_root_evidence=refuse)
     kernel.registry.add_evidence(EvidenceRecord(
         evidence_id="ev-1", subject_id="p0", kind=EvidenceKind.SOURCE_OBSERVATION, provided_by=Actor.system("tie"),
         active=active))
@@ -70,15 +71,18 @@ def test_the_refusal_names_the_proposition_and_the_record():
 def test_it_is_off_by_default_so_an_existing_kernel_judges_roots_as_before():
     kernel = kernel_holding(active=False, refuse=False)
     assert kernel.admit_root(root_citing(EpistemicStatus.FACT)) == ()
-    assert ConservationKernel(allow_unguarded_roots=True).refuse_inactive_root_evidence is False
+    assert ConservationKernel(allow_unguarded_evidence=True, allow_unguarded_roots=True).refuse_inactive_root_evidence is False
 
 
 def test_restoring_a_snapshot_never_applies_it_so_withdrawn_evidence_cannot_brick_a_ledger():
     """A root admitted while its evidence was active stays admitted if the evidence is withdrawn afterwards. Restoring
     it, even into a kernel that refuses such roots now, must succeed."""
-    kernel = kernel_holding(active=False)
-    kernel.ledger.add_initial(root_citing(EpistemicStatus.FACT))  # stands for a root admitted before the withdrawal
-    restored = ConservationKernel.from_snapshot(kernel.snapshot(), allow_unguarded_roots=True,
+    kernel = kernel_holding(active=True)
+    kernel.ledger.add_initial(root_citing(EpistemicStatus.FACT))  # admitted while ev-1 was active
+    snapshot = kernel.snapshot()
+    snapshot["registry"]["evidence"][0]["active"] = False  # the evidence is withdrawn afterwards
+    snapshot["snapshot_digest"] = _digest(canonical_json({k: v for k, v in snapshot.items() if k != "snapshot_digest"}))
+    restored = ConservationKernel.from_snapshot(snapshot, allow_unguarded_roots=True, allow_unguarded_evidence=True,
                                                 refuse_inactive_root_evidence=True)
     assert restored.refuse_inactive_root_evidence is True
     assert restored.ledger.artifact("root:doc-1") is not None

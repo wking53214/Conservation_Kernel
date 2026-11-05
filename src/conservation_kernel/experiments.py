@@ -412,7 +412,7 @@ def run_experiment(steps: int = 10) -> dict:
         if step in attack_schedule:
             attack_output, attack_record, attack_registry = attack_map[attack_schedule[step]].build(treatment_current)
             attack_result = verifier.verify(treatment_current, attack_output, attack_record, attack_registry)
-            treatment_ledger.record_rejection(attack_result)
+            treatment_ledger.record_rejection(attack_result, attack_record, attack_output)
             treatment_rejections.append(attack_result)
             control_current = attack_output
             control_chain.append((control_current, attack_record))
@@ -428,7 +428,7 @@ def run_experiment(steps: int = 10) -> dict:
             treatment_current = treatment_output
             treatment_accepted.append(treatment_result)
         else:
-            treatment_ledger.record_rejection(treatment_result)
+            treatment_ledger.record_rejection(treatment_result, treatment_record, treatment_output)
             treatment_rejections.append(treatment_result)
 
     # Audit the control after it has run. The control did not use this verifier

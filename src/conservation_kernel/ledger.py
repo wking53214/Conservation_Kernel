@@ -7,7 +7,7 @@ from collections.abc import Callable
 from .errors import LedgerError, RootAdmissionError
 from .events import TransformationRecord
 from .model import Artifact
-from .result import VerificationResult
+from .result import VerificationResult, _proof_issuer
 
 
 class ConservationLedger:
@@ -20,7 +20,7 @@ class ConservationLedger:
 
     def __init__(self, *, root_guard: Callable[[Artifact], bool] | None = None) -> None:
         """`root_guard`, if given, is asked before any initial artifact is added, and the artifact is added only
-        if it answers True. It is the caller's own permission check (the kernel imports nothing to supply one); a
+        if it answers True. A ledger owned by a kernel also holds every root to the kernel's `admit_root`. It is the caller's own permission check (the kernel imports nothing to supply one); a
         guard that raises or answers anything but True refuses. If it has `commit` and `abort` methods it is told
         which happened after a yes: `commit()` once the root is in, `abort()` if adding it raised. Rebuilding a ledger from a snapshot does not ask it."""
         self._root_guard = root_guard
@@ -32,6 +32,19 @@ class ConservationLedger:
         # history written before times existed), never from a later attempt that the ledger refused.
         self._admitted_at: dict[str, str] = {}
         self._verified_at: dict[str, str] = {}
+        # The registry of the kernel that owns this ledger, once one does (`_bind`). A ledger with no kernel has no
+        # registry of its own to hold a verdict against, so it takes any result the verifier produced.
+        self._issuer: str | None = None
+        self._admit_root: Callable[..., tuple[str, ...]] | None = None
+
+    def _bind(self, issuer: str, admit_root: Callable[..., tuple[str, ...]]) -> None:
+        """Called by the kernel that takes this ledger: from now on `commit` takes only a result the verifier produced
+        against that kernel's registry, and `add_initial` asks `admit_root(artifact, as_of=...)` (the kernel's own
+        admission, which reads the registry) before it adds a root."""
+        if self._issuer is not None and self._issuer != issuer:
+            raise LedgerError("this ledger already belongs to a kernel with another registry")
+        self._issuer = issuer
+        self._admit_root = admit_root
 
     @property
     def root_guard(self) -> Callable[[Artifact], bool] | None:
@@ -44,10 +57,17 @@ class ConservationLedger:
         return self._root_guard is not None
 
     def add_initial(self, artifact: Artifact, *, admitted_at: str | None = None) -> None:
-        if artifact.parent_artifact_ids:
-            raise LedgerError("an initial artifact cannot already have parents")
         if artifact.artifact_id in self._artifacts:
             raise LedgerError(f"duplicate artifact ID {artifact.artifact_id}")
+        if self._admit_root is not None:
+            # Whatever door a root comes through, it is held to what the registry backs. Asked before the parent check
+            # and the guard, so a forged root is reported as a root refusal, and a one-use permission is not spent on a
+            # root that could never be admitted.
+            reasons = self._admit_root(artifact, as_of=admitted_at)
+            if reasons:
+                raise RootAdmissionError("root refused: " + "; ".join(reasons))
+        if artifact.parent_artifact_ids:
+            raise LedgerError("an initial artifact cannot already have parents")
         if self._root_guard is not None:
             try:
                 permitted = self._root_guard(artifact) is True
@@ -85,9 +105,11 @@ class ConservationLedger:
         reported but refused by the ledger, and must not move this transformation's time."""
         return self._verified_at.get(transformation_id)
 
-    def record_times(self, *, admitted: dict[str, str] | None = None, verified: dict[str, str] | None = None) -> None:
+    def _record_times(self, *, admitted: dict[str, str] | None = None, verified: dict[str, str] | None = None) -> None:
         """Give a time to history that has none (roots or committed transformations written before times existed,
-        or straight to the ledger). A time already recorded is never replaced."""
+        or straight to the ledger). A time already recorded is never replaced. Not public: a restore judges each item
+        as of its stamp, so a stamp a caller chose could put history outside a later revocation or expiry. Only the
+        kernel's own reload, which stamps with its clock, calls this."""
         for artifact_id, moment in (admitted or {}).items():
             if artifact_id not in self._artifacts:
                 raise LedgerError(f"no artifact {artifact_id} to record a time for")
@@ -119,17 +141,39 @@ class ConservationLedger:
                 raise LedgerError(f"parent artifact {parent} is not in the ledger")
         if record.transformation_id in self._transformations:
             raise LedgerError(f"duplicate transformation ID {record.transformation_id}")
+        # A result is a plain object a caller can write by hand, so PASS alone proves nothing. Only a result the
+        # verifier produced for exactly this record and output, against this ledger's kernel's registry, is taken.
+        issuer = _proof_issuer(result, record, output)
+        if issuer is None:
+            raise LedgerError("the result was not produced by the verifier for this record and output; "
+                              "transformations are submitted with ConservationKernel.submit")
+        if self._issuer is not None and issuer != self._issuer:
+            raise LedgerError("the result was verified against a registry other than this ledger's kernel's")
         self._add_artifact(output)
         self._transformations[record.transformation_id] = record
         self._reports.append(result)
         if result.verified_at is not None:
             self._verified_at[record.transformation_id] = result.verified_at
 
-    def record_rejection(self, result: VerificationResult) -> None:
+    def record_rejection(self, result: VerificationResult, record: TransformationRecord, output: Artifact) -> None:
+        """Keep `result` as a report. Like `commit`, it takes only a result the verifier produced for exactly this
+        record and output (and, on a ledger a kernel owns, against that kernel's registry), so a verdict written by
+        hand cannot sit in the history beside the real ones. It may be a rejection or an accepted result the ledger
+        then refused to commit."""
+        issuer = _proof_issuer(result, record, output)
+        if issuer is None:
+            raise LedgerError("the result was not produced by the verifier for this record and output, "
+                              "so it is not kept as a report")
+        if self._issuer is not None and issuer != self._issuer:
+            raise LedgerError("the result was verified against a registry other than this ledger's kernel's")
         self._reports.append(result)
 
     def artifact(self, artifact_id: str) -> Artifact:
         return self._artifacts[artifact_id]
+
+    def get(self, artifact_id: str) -> Artifact | None:
+        """The artifact with this id, or None if the ledger holds none."""
+        return self._artifacts.get(artifact_id)
 
     def artifacts(self) -> tuple[Artifact, ...]:
         return tuple(self._artifacts.values())

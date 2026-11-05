@@ -196,7 +196,7 @@ def _same_clock():
 
 
 def _twin(base, registry):
-    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=_same_clock)
+    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=_same_clock, allow_unguarded_evidence=True)
     kernel.register_root(base)
     return kernel
 
@@ -416,7 +416,7 @@ def test_submit_to_cns_lets_a_kernel_error_that_is_not_a_ledger_refusal_propagat
         def verify(self, input_artifacts, output, record, registry):
             raise RuntimeError("the verifier failed")
 
-    broken = ConservationKernel(allow_unguarded_roots=True, registry=registry, verifier=Exploding())
+    broken = ConservationKernel(allow_unguarded_roots=True, registry=registry, verifier=Exploding(), allow_unguarded_evidence=True)
     broken.register_root(base)
     with pytest.raises(RuntimeError, match="the verifier failed"):
         submit_to_cns(broken, base, output, good)
@@ -426,8 +426,8 @@ def test_submit_to_cns_lets_a_kernel_error_that_is_not_a_ledger_refusal_propagat
 def test_an_unregistered_parent_is_a_terminal_breach_not_a_raise():
     base, registry = build_ground_truth()
     output, record = legitimate_transformation(base, 1)
-    native_kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=_same_clock)
-    connected_kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=_same_clock)
+    native_kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=_same_clock, allow_unguarded_evidence=True)
+    connected_kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry, clock=_same_clock, allow_unguarded_evidence=True)
     with pytest.raises(LedgerError, match="not in the ledger"):
         native_kernel.submit(base, output, record)
     verdict = submit_to_cns(connected_kernel, base, output, record)
@@ -644,7 +644,7 @@ def test_a_root_verdict_binds_the_content_of_the_root_not_only_its_id():
     assert first.artifact_id == second.artifact_id
     assert first.artifact_digest != second.artifact_digest
     assert root_digest(first) != root_digest(second)
-    verdict = CnsRootAdmissionGate(ConservationKernel(allow_unguarded_roots=True)).check(first)
+    verdict = CnsRootAdmissionGate(ConservationKernel(allow_unguarded_roots=True, allow_unguarded_evidence=True)).check(first)
     assert verdict.outcome is PASS
     assert verdict.binds("root", root_digest(first))
     assert not verdict.binds("root", root_digest(second))
@@ -758,23 +758,24 @@ def test_a_non_finite_duplicate_declaration_the_verifier_accepts_is_still_an_unb
     assert "ledger" not in verdict.reason
 
 
-def test_submit_to_cns_says_when_the_ledger_holds_what_the_verdict_refuses():
+def test_an_accepted_non_finite_declaration_is_refused_by_the_ledger_and_the_verdict_says_so():
+    """The verifier cannot stamp a record it cannot digest, so the ledger never takes its accepted result. The kernel
+    fails closed: nothing is committed or kept, and the verdict says the ledger refused it."""
     base, output, record, registry = _accepted_with_a_duplicate_non_finite_declaration()
     native_kernel = _twin(base, registry)
     connected_kernel = _twin(base, registry)
-    assert native_kernel.submit(base, output, record).accepted
+    with pytest.raises(LedgerError, match="not produced by the verifier"):
+        native_kernel.submit(base, output, record)
 
     verdict = submit_to_cns(connected_kernel, base, output, record)
     assert verdict.outcome is BREACH
     assert not verdict.bound()
-    assert "committed the output to the ledger" in verdict.reason
-    # The kernel did exactly what a direct submit does, and holds the output.
+    assert "ledger refused to commit" in verdict.reason
+    assert "committed the output to the ledger" not in verdict.reason
     for kernel in (native_kernel, connected_kernel):
-        assert [t.transformation_id for t in kernel.ledger.transformations()] == [
-            record.transformation_id
-        ]
-        assert output.artifact_id in [a.artifact_id for a in kernel.ledger.artifacts()]
-        assert len(kernel.ledger.reports()) == 1
+        assert kernel.ledger.transformations() == ()
+        assert output.artifact_id not in [a.artifact_id for a in kernel.ledger.artifacts()]
+        assert kernel.ledger.reports() == ()
 
 
 def test_a_rejection_that_cannot_be_digested_does_not_claim_the_ledger_holds_it():
@@ -859,7 +860,7 @@ def test_the_transformation_gate_satisfies_the_cns_gate_protocol_at_omega():
 
 
 def test_the_root_admission_gate_satisfies_the_cns_gate_protocol_at_alpha():
-    gate = CnsRootAdmissionGate(ConservationKernel(allow_unguarded_roots=True))
+    gate = CnsRootAdmissionGate(ConservationKernel(allow_unguarded_roots=True, allow_unguarded_evidence=True))
     assert isinstance(gate, cns_gate.Gate)
     assert gate.name == "root_admission"
     assert gate.position is ALPHA
@@ -922,7 +923,7 @@ def test_the_gates_refuse_a_candidate_of_the_wrong_kind():
     with pytest.raises(TypeError, match="TransformationCandidate"):
         CnsGate(registry).check(base)
     with pytest.raises(TypeError, match="Artifact"):
-        CnsRootAdmissionGate(ConservationKernel(allow_unguarded_roots=True)).check("not an artifact")
+        CnsRootAdmissionGate(ConservationKernel(allow_unguarded_roots=True, allow_unguarded_evidence=True)).check("not an artifact")
     output, record = legitimate_transformation(base, 1)
     with pytest.raises(TypeError):
         TransformationCandidate(base, "not an artifact", record)
@@ -972,7 +973,7 @@ def test_the_chain_runs_through_cns_resolution():
 
 def test_an_admissible_root_maps_to_pass_at_the_alpha_end():
     base, registry = build_ground_truth()
-    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry)
+    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry, allow_unguarded_evidence=True)
     verdict = CnsRootAdmissionGate(kernel).check(base)
     assert kernel.admit_root(base) == ()
     assert verdict.outcome is PASS
@@ -983,7 +984,7 @@ def test_an_admissible_root_maps_to_pass_at_the_alpha_end():
 
 
 def test_a_forged_root_maps_to_terminal_breach_with_the_kernels_reasons():
-    kernel = ConservationKernel(allow_unguarded_roots=True)
+    kernel = ConservationKernel(allow_unguarded_roots=True, allow_unguarded_evidence=True)
     forged = _forged_root()
     reasons = kernel.admit_root(forged)
     assert reasons
@@ -1032,7 +1033,7 @@ ROOT_SCENARIOS = _root_scenarios()
 def test_the_root_gate_refuses_exactly_what_register_root_refuses_and_registers_nothing(
     label, root, registry, preregistered
 ):
-    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry)
+    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry, allow_unguarded_evidence=True)
     for existing in preregistered:
         kernel.register_root(existing)
     before = kernel.ledger.snapshot()
@@ -1061,7 +1062,7 @@ def test_admit_root_alone_does_not_see_what_the_ledger_refuses_but_the_gate_does
     that ``register_root`` refuses."""
     base, registry = build_ground_truth()
     derived, _ = _derive(base, "child")
-    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry)
+    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry, allow_unguarded_evidence=True)
     kernel.register_root(base)
     gate = CnsRootAdmissionGate(kernel)
 
@@ -1091,7 +1092,7 @@ def test_root_refusals_lists_the_propositions_reasons_first_then_the_ledgers():
         "root-forged-child", "x", forged.propositions, Actor("bot", ActorKind.SYSTEM),
         parent_artifact_ids=(forged.artifact_id,), version=2,
     )
-    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry)
+    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry, allow_unguarded_evidence=True)
     reasons = root_refusals(kernel, child)
     assert reasons[: len(kernel.admit_root(child))] == kernel.admit_root(child)
     assert reasons[-1] == "an initial artifact cannot already have parents"
@@ -1101,7 +1102,7 @@ def test_root_refusals_lists_the_propositions_reasons_first_then_the_ledgers():
 
 
 def test_a_root_verdict_is_bound_to_the_root_it_judged():
-    kernel = ConservationKernel(allow_unguarded_roots=True)
+    kernel = ConservationKernel(allow_unguarded_roots=True, allow_unguarded_evidence=True)
     forged, other = _forged_root(), _unsourced_fact_root()
     verdict = CnsRootAdmissionGate(kernel, subject="root-a").check(forged)
     assert verdict.bound()
@@ -1122,7 +1123,7 @@ def test_admission_reasons_given_as_a_bare_string_are_refused():
 
 def test_each_end_is_placed_where_cns_expects_it_and_resolves_fail_closed():
     base, registry = build_ground_truth()
-    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry)
+    kernel = ConservationKernel(allow_unguarded_roots=True, registry=registry, allow_unguarded_evidence=True)
     chain = cns_gate.GateChain(
         alpha=(CnsRootAdmissionGate(kernel),),
         omega=(CnsGate(registry),),
@@ -1152,7 +1153,7 @@ def test_the_root_gate_judges_an_unguarded_kernel_as_before_by_default():
     from conservation_kernel import ConservationKernel
     from conservation_kernel.cns_connector import CnsRootAdmissionGate
     from tests.test_root_guard import root as guard_root
-    result = CnsRootAdmissionGate(ConservationKernel(allow_unguarded_roots=True)).check(guard_root())
+    result = CnsRootAdmissionGate(ConservationKernel(allow_unguarded_roots=True, allow_unguarded_evidence=True)).check(guard_root())
     assert result.outcome.value == "pass"
 
 
@@ -1160,9 +1161,9 @@ def test_require_guard_refuses_a_kernel_with_no_guard_and_passes_one_with_a_guar
     from conservation_kernel import ConservationKernel
     from conservation_kernel.cns_connector import CnsRootAdmissionGate
     from tests.test_root_guard import root as guard_root
-    refused = CnsRootAdmissionGate(ConservationKernel(allow_unguarded_roots=True), require_guard=True).check(guard_root())
+    refused = CnsRootAdmissionGate(ConservationKernel(allow_unguarded_roots=True, allow_unguarded_evidence=True), require_guard=True).check(guard_root())
     assert refused.outcome.value == "terminal_breach" and "no root guard" in refused.reason
-    allowed = CnsRootAdmissionGate(ConservationKernel(root_guard=lambda a: False), require_guard=True).check(guard_root())
+    allowed = CnsRootAdmissionGate(ConservationKernel(root_guard=lambda a: False, allow_unguarded_evidence=True), require_guard=True).check(guard_root())
     assert allowed.outcome.value == "pass"
 
 
@@ -1172,7 +1173,7 @@ def test_the_root_gate_does_not_ask_for_an_evidence_guard_by_default():
     from conservation_kernel import ConservationKernel
     from conservation_kernel.cns_connector import CnsRootAdmissionGate
     from tests.test_root_guard import root as guard_root
-    result = CnsRootAdmissionGate(ConservationKernel(root_guard=lambda a: False)).check(guard_root())
+    result = CnsRootAdmissionGate(ConservationKernel(root_guard=lambda a: False, allow_unguarded_evidence=True)).check(guard_root())
     assert result.outcome.value == "pass"
 
 
@@ -1180,7 +1181,7 @@ def test_require_evidence_guard_refuses_a_kernel_with_no_evidence_guard_and_pass
     from conservation_kernel import ConservationKernel
     from conservation_kernel.cns_connector import CnsRootAdmissionGate
     from tests.test_root_guard import root as guard_root
-    bare = ConservationKernel(root_guard=lambda a: False)
+    bare = ConservationKernel(root_guard=lambda a: False, allow_unguarded_evidence=True)
     refused = CnsRootAdmissionGate(bare, require_evidence_guard=True).check(guard_root())
     assert refused.outcome.value == "terminal_breach" and "no evidence guard" in refused.reason
     guarded = ConservationKernel(root_guard=lambda a: False, evidence_guard=lambda record: False)
@@ -1192,12 +1193,12 @@ def test_the_two_requirements_are_independent_and_both_reasons_are_given_when_bo
     from conservation_kernel import ConservationKernel
     from conservation_kernel.cns_connector import CnsRootAdmissionGate
     from tests.test_root_guard import root as guard_root
-    kernel = ConservationKernel(allow_unguarded_roots=True)
+    kernel = ConservationKernel(allow_unguarded_roots=True, allow_unguarded_evidence=True)
     both = CnsRootAdmissionGate(kernel, require_guard=True, require_evidence_guard=True).check(guard_root())
     assert "no root guard" in both.reason and "no evidence guard" in both.reason
     only_root = CnsRootAdmissionGate(ConservationKernel(evidence_guard=lambda r: True, allow_unguarded_roots=True),
                                      require_guard=True, require_evidence_guard=True).check(guard_root())
     assert "no root guard" in only_root.reason and "no evidence guard" not in only_root.reason
-    only_evidence = CnsRootAdmissionGate(ConservationKernel(root_guard=lambda a: True),
+    only_evidence = CnsRootAdmissionGate(ConservationKernel(root_guard=lambda a: True, allow_unguarded_evidence=True),
                                          require_guard=True, require_evidence_guard=True).check(guard_root())
     assert "no evidence guard" in only_evidence.reason and "no root guard" not in only_evidence.reason

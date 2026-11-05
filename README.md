@@ -1,6 +1,6 @@
 # Conservation_Kernel
 
-Independently testable **hostile baseline** for transformation conservation. Version 0.3.0, not yet tagged (`CHANGELOG.md` lists it under Unreleased; live path pins `25145aa` / 0.3.0). Stdlib only. Python ≥ 3.11.
+Independently testable **hostile baseline** for transformation conservation. Version 0.3.0, not yet tagged (`CHANGELOG.md` lists it under Unreleased; consumers pin it by commit, see Section 4). Stdlib only. Python ≥ 3.11.
 
 ## 1. Pipeline Position & Role
 
@@ -68,35 +68,37 @@ Natural-language semantic equivalence is **unverifiable** when content changes. 
 | Clock | Windows and revocations are only as good as the clock handed to the kernel. A deployment should hand in its ledger's clock. A stale registry snapshot still honours a since-revoked grant. |
 | NL equivalence | Explicitly unverified. |
 | Vocab drift | Gateway epistemic enum ≠ this enum. Adapters must map. |
-| Pinned by consumers | observe-perceive and sentinel_os pin `25145aa`. Do not "fix" the default branch without re-running those suites. |
+| Pinned by consumers | Consumers install this package by commit, not by tag. As read on 2026-10-31, observe-perceive pins `4e7c0d9` (`pyproject.toml`, `requirements-demo.txt`); this README no longer states a sentinel_os pin because none was found in its `pyproject.toml` or requirements files. Do not "fix" the default branch without re-running those suites. |
 | Not a product | Commercial red team: receipt library is a **component of the spine**, not a purchase. |
 | No Raft, no multi-region | Single-process verifier. |
 
 ### Release and test status
 
-Measured 2026-10-30 at main `7233ab6`.
+Measured 2026-10-31 at main `c51a246`, Python 3.13.
 
 | What | State |
 |---|---|
 | Version | 0.3.0 (`pyproject.toml` and `__version__`). `ConservationKernel.version` still reads 0.2.0 and is what snapshots record as `kernel_version`; the two have not been brought together. |
 | Tag and GitHub Release | None yet. The changelog has no 0.2.0 or 0.3.0 heading; both are under Unreleased. Tagging is the owner's decision. |
 | CI on main | Green (tests on Python 3.11 and 3.12, with and without CNS, plus ruff 0.15.22) |
-| Tests | 177 passed and 2 skipped without CNS, 320 passed with the `cns` extra installed |
-| CNS pin | The optional `cns` extra is pinned to the tag v2.2.0, the same as the rest of the spine |
+| Tests | Without CNS importable: 250 passed, 2 skipped, 0 failed (`python3 -m pytest -q` with `cns`, `cns_interop` and `cns_composition` blocked). With CNS installed: 396 passed, 0 failed, 0 skipped (396 collected), measured on Python 3.11, 3.12 and 3.13 on 2026-10-31. Not re-measured: GitHub Actions status. |
+| Known failing tests | None with CNS installed. The seven failures recorded before 2026-10-31 came from the verifier's proof stamp crashing on records holding NaN or infinity (six tests) and from `add_initial` checking parents before root admission (one test); both are fixed on this branch. |
+| CNS pin | `pyproject.toml` pins the optional `cns` extra to tag v2.3.0 (an earlier version of this README, and the comment in `pyproject.toml`, still say v2.2.0). |
 
 ### Which doors write, and what protects each
 
 | Door | Protection today |
 |---|---|
-| `register_root` and `ledger.add_initial` | The root guard. A kernel refuses to be built without one unless `allow_unguarded_roots=True` says so. The guard answers only `True` to permit. |
-| `ledger.commit` | A bookkeeping step after a result says accepted. It is not a permission check: a result is a plain object the caller can write. |
-| `ConservationKernel.submit` | The verifier decides. Any caller may submit. |
-| `registry.add_authorization`, `add_delegation`, `revoke` | Only from a human in `trusted_humans`, when the deployer sets that. With it unset, any actor id is accepted. |
-| `registry.add_evidence` | Optional. With `evidence_guard` on the registry (or on the kernel that builds it), a record is added only if the guard answers exactly `True`; a raise or any other answer refuses and leaves the registry unchanged. A duplicate id is refused before the guard is asked, and evidence restored from a snapshot is not put to it. With no guard, any caller can add active evidence that declares itself independent, as before. |
-| `ledger.record_rejection`, `record_times` | None. A report can be added by any caller holding the ledger; times are set once and never replaced. |
+| `register_root` and `ledger.add_initial` | The root guard, and on a ledger a kernel owns the kernel's `admit_root` (every reference a root cites must exist and back what it claims), asked first. A kernel refuses to be built without a guard unless `allow_unguarded_roots=True` says so. The guard answers only `True` to permit. |
+| `ledger.commit` | Takes only a result the verifier produced for this record and output (`VerificationResult.proof`); a result written by hand, or edited after verification, is refused. A ledger a kernel owns also refuses one reached against any registry but that kernel's. |
+| `ConservationKernel.submit` | The verifier decides. Any caller may submit, but an input that shares an id with a ledger artifact must be that artifact. |
+| `registry.add_authorization`, `add_delegation`, `revoke` | Only from a human in `trusted_humans`, when the deployer sets that. With it unset, any actor id is accepted. An authorization that carries a `subject_digest` counts only for the proposition with that digest, and with `require_content_bound` one without a digest is refused. |
+| `registry.add_evidence` | Optional. With `evidence_guard` on the registry (or on the kernel that builds it), a record is added only if the guard answers exactly `True`; a raise or any other answer refuses and leaves the registry unchanged. A duplicate id is refused before the guard is asked, and evidence restored from a snapshot is put to it too, so a file cannot plant what the guard would refuse. A kernel refuses to be built without an evidence guard unless `allow_unguarded_evidence=True` says so (the same rule as `allow_unguarded_roots`), because with no guard any caller can add active evidence that declares itself independent. A bare `EvidenceRegistry` with no guard still takes any caller's evidence. |
+| `ledger.record_rejection` | Takes only a result the verifier produced for the record and output it is given (its proof must check), and on a ledger a kernel owns only one reached against that kernel's registry. |
+| times on roots and transformations | Set by the kernel's clock when it admits or accepts, and once by its own reload for history that has none. There is no public door to stamp a time. |
 | `from_snapshot` and `load` | Digest check and re-verification; a signature only if the loader passes a signer. |
 
-Evidence is the first of the open doors to get an optional caller permission, because the verifier trusts evidence to approve strong claims. Whether `submit` and `ledger.record_rejection` should get one too is an open decision for the owner, and the CNS evidence spine does not yet pass an evidence guard.
+Evidence is the first of the open doors to get an optional caller permission, because the verifier trusts evidence to approve strong claims. Whether `submit` should get one too is an open decision for the owner, and the CNS evidence spine does not yet pass an evidence guard.
 
 `python3 -m pytest -q` (hostile suite included). `PYTHONPATH=src python3 experiments/run_experiment.py` is a simulated control/treatment, **not** a population claim about LLMs.
 
@@ -134,11 +136,44 @@ sentinel_os.governance_harness._write_decision
         → conservation/boundary.py → this verifier → else fail-close ledger write
 ```
 
-### Place in the evidence spine
+### Role in the STACK spine
 
-The evidence spine is the five repositories a document passes through in order: HERALD reads it and extracts claims, TIE records the evidence, Conservation_Kernel decides whether a root may be admitted, Governance_Gateway judges the admission door, and CCC takes the document into its store. CNS holds the roster that makes the decision, the check that every seat judged the same document, and the one-use guard that lets an approved decision open only the door it judged. `chains/evidence_spine.py` in CNS runs all of it end to end. Measured 2026-10-30 with every repository at main: 30 results, all ok, and exactly one recorded GAP (a kernel built without its guard and called directly), which the script asserts as a stated fact and never skips.
+The evidence spine is the five repositories one document passes through in order: HERALD reads it and extracts claims (judging the document and each claim), TIE records HERALD's signed export as evidence and refuses a changed export, Conservation_Kernel judges a root artifact built from that evidence before it becomes ancestry, Governance_Gateway judges the artifact at its admission door, and CCC judges the attempt to ingest into its store. `chains/evidence_spine.py` in CNS drives all five (it imports `conservation_kernel`, `Artifact`, `ConservationKernel` and `CnsRootAdmissionGate` at lines 137-141 of that file).
 
-Conservation_Kernel is the third hop. It admits or refuses a root, and a root is registered only with its guard's permission. In the spine the guard is a one-use `DecisionGuard`, so an approved decision opens the kernel once, for the one root it judged.
+```text
+HERALD ──signed export──> TIE ──evidence──> Conservation_Kernel ──root──> Governance_Gateway ──> CCC
+ claims                  records,           judges a root artifact       judges the            judges the
+                         refuses a          before it is ancestry        admission door        ingest attempt
+                         changed export     (this repo)
+              CNS: gate shapes, roster, one-use DecisionGuard (moves objects, decides nothing)
+```
+
+**Purpose.** Decide whether a root artifact (or a declared transformation of an existing artifact) may enter the ledger, by recomputing what changed and checking it against registered evidence and authorizations.
+
+**Responsibilities (this repo).**
+- Recompute observed changes and reject undeclared shifts in protected dimensions (`verifier.py`).
+- Judge a root before it is registered (`ConservationKernel.admit_root`, `kernel.py:114`; `register_root`, `kernel.py:172`).
+- Hold the evidence and authorization registries and the append-only in-memory ledger (`registry.py`, `ledger.py`), and snapshot and reload them (`kernel.py:223`, `kernel.py:311`).
+
+**Inputs and outputs.** In: an input `Artifact`, a `TransformationRecord` with declared changes, an output `Artifact`, evidence and authorization events. Out: a `VerificationResult` (`PASS`, `PASS_WITH_DECLARED_TRANSFORMATION`, `REJECT`, `UNVERIFIABLE`), ledger entries, and signed snapshots. For roots, the list of refusals from `admit_root`.
+
+**Owns.** The verdict on conservation of protected epistemic and provenance distinctions; the authorization lifecycle rules (windows, revocation, delegation) as applied to registered events; the ledger and snapshot format.
+
+**Does not own.**
+- Truth of content. HERALD extracts and judges claims; this kernel does not read them for truth.
+- Evidence provenance before it arrives. TIE records HERALD's export; the kernel only checks that a registered record backs what a root cites. An `evidence_guard` is how a deployer lets the owner of evidence permit a record, and the kernel never mints evidence.
+- Permission to proceed. Governance_Gateway judges the admission door and CCC judges its own ingest; the receiver's policy permits, not this kernel.
+- The roster, the cross-seat same-document check and the one-use guard. Those are CNS (`cns_composition`, `cns_interop`), and the kernel calls none of them. In the spine, CNS supplies the object passed as `root_guard`; the kernel only asks it a yes or no question.
+- Issuing authorizations, durable custody, execution.
+
+**Integration with the spine seats.** The kernel has no import of HERALD, TIE, Governance_Gateway, CCC, CCCb or Link (grep of `src/` and `docs/` found none; `docs/GATEWAY.md` names GEMS, not Governance_Gateway, as a reference gateway). TIE and HERALD reach the kernel only through the spine script: the script builds the kernel with `root_guard=DecisionGuard(...)` (`chains/evidence_spine.py:237`, `fresh_guard` at 377) and an `evidence_guard=tie_evidence_guard(...)` (`chains/evidence_spine.py:209`, `239`). Those guards are written in CNS's script, not here. As read on 2026-10-31 from `/home/user/CNS`; the spine's own run was not repeated for this README (CNS recorded 30 results, all ok, and one stated GAP, on 2026-10-30).
+
+**CNS interaction: partial.**
+- Implemented, optional, one direction: `conservation_kernel/cns_connector.py` loads `cns.gate` lazily by `importlib.import_module` (`cns_connector.py:133`, `186`) and expresses verdicts as `GateResult`s: `CnsGate` (OMEGA, `cns_connector.py:489`), `CnsRootAdmissionGate` (ALPHA, `cns_connector.py:536`), `verify_to_cns` (`:604`), `submit_to_cns` (`:624`). Nothing in `kernel.py`, `verifier.py` or `ledger.py` imports CNS, and `tests/test_cns_independence.py` covers loading without it.
+- Used by the spine: CNS's `evidence_spine.py` builds `CnsRootAdmissionGate(kernel, require_guard=True, require_evidence_guard=True)` as the Conservation_Kernel seat (`chains/evidence_spine.py:476`, `922`). The spine does not use this repo's `CnsGate` (its `CnsGate` import at line 142 is Governance_Gateway's).
+- Not implemented: `cns_interop` (UAI-1 signed messages) and `cns_composition` are not imported anywhere in this repo (absent). The kernel does not sign or verify UAI-1 messages itself; `signing.py` signs snapshots only.
+- Not paired: `cns_chain(...).complete()` is `False` by design (Section 8).
+- Known gap: 7 connector tests fail today (Release and test status, above).
 
 Docs: `docs/INVARIANTS.md`, `docs/THREAT_MODEL.md`, `docs/LIMITATIONS.md`, `docs/HOSTILE_REVIEW.md`.
 
@@ -214,14 +249,15 @@ A `DeclaredChange` holding NaN or an infinity cannot be digested by the kernel
 or by CNS, and the connector never turns it into a `PASS`:
 
 - The kernel rejects it: the verdict is `TERMINAL_BREACH` and unbound
-  (`cns.gate.unbound` names it).
+  (`cns.gate.unbound` names it). The verifier cannot stamp a record it cannot
+  digest, so the result is unproven and nothing is kept as a report.
 - The kernel accepts it. A matching declaration followed by a second
   declaration for the same subject and dimension with the non-finite value is
-  accepted, because the verifier stops at the first match, and the kernel
-  commits it. The verdict is still the unbound `TERMINAL_BREACH`, so here the
-  CNS verdict and the ledger disagree, and `submit_to_cns` says so in the
-  reason. That is a kernel inconsistency the connector surfaces and does not
-  fix.
+  accepted by the verifier, because it stops at the first match. But the
+  result has no proof, so the ledger refuses to commit it: `submit` raises
+  `LedgerError`, nothing is committed or kept, and the verdict is the unbound
+  `TERMINAL_BREACH`. `submit_to_cns` reports the refusal in the reason, so the
+  CNS verdict and the ledger agree.
 - The kernel raises `ValueError` while verifying. There is no verdict to
   translate, so the connector propagates the error unchanged.
 

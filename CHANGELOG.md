@@ -2,6 +2,49 @@
 
 ## Unreleased
 
+- `ConservationLedger.record_rejection(result, record, output)` takes only a result the verifier produced for that
+  record and output, the way `commit` does, and a ledger a kernel owns only one reached against its registry. It took
+  any `VerificationResult`, so a hand-written `PASS` could sit in the history beside the real verdicts (nothing decides
+  from reports, but an auditor reads them as what the verifier said). **Breaking:** the method now needs the record
+  and output; `submit` and the experiment pass them. Reports restored from a snapshot carry no proof and are history
+  only, as before.
+- `ConservationLedger.record_times` is now private (`_record_times`). It let any caller stamp an unstamped root or
+  transformation with a time of their choosing, and a restore judges each as of its stamp, so a stamp in the past put
+  history outside every revocation or expiry recorded after it. The kernel's own reload still stamps unstamped history
+  once, with its clock. **Breaking:** code that called `ledger.record_times` has no replacement; times come from the
+  kernel's clock.
+- `ConservationKernel.submit` refuses (`LedgerError`) an input artifact that shares an id with a ledger artifact but is
+  not that artifact. It used to verify whatever "before" the caller handed in, so a doctored copy of a registered root
+  (an INFERENCE shown as a FACT with real evidence) let a FACT child of an INFERENCE root into the ledger, which the
+  next restore then refused to reload. Inputs not in the ledger are unchanged (the commit still refuses them).
+  `ConservationLedger.get(artifact_id)` returns the held artifact or None.
+- A kernel now refuses to be built without an evidence guard: `ConservationKernel(...)` and `from_snapshot(...)` raise
+  `UnguardedKernelError` unless `evidence_guard=...` is given (or the registry you pass in has one) or
+  `allow_unguarded_evidence=True` says that is deliberate, mirroring `allow_unguarded_roots`. With a root guard but no
+  evidence guard, any caller could add INDEPENDENT_VERIFICATION evidence that declares itself independent and the
+  verifier would count it. **Breaking:** code that builds a kernel with no evidence guard must pass the flag. A bare
+  `EvidenceRegistry` is unchanged.
+- `AuthorizationEvent(subject_digest=...)` binds an authorization to the words it approves. One authorization for p-1
+  becoming `HUMAN_AUTHORIZED` used to admit both "Refund customer $10." and "Refund customer $10,000,000.", because
+  matching used only the subject id, the kind of change and the target value. `Proposition.canonical_digest` (id, text
+  and conditions, not the status an authorization is about to change) is the value to bind to. When an authorization
+  carries a digest it must equal that of the proposition it is used for, at root admission, in every verifier check,
+  and for a new proposition's authority and canonical state; a caller that does not name the content cannot use it.
+  The field is optional, round-trips in snapshots and is absent from the dict when unset, so existing digests do not
+  change. `ConservationKernel(require_content_bound=True)` (or `EvidenceRegistry(require_content_bound=True)`) refuses an
+  authorization with no digest, live and on restore. Default `False`.
+- `ledger.add_initial` on a ledger a kernel owns applies the kernel's `admit_root`, before the root guard, so a root that
+  cites evidence or authorizations the registry does not hold is refused through either door; it used to register
+  through `kernel.ledger.add_initial` although `register_root` refused it. `register_root` now delegates to it. A ledger
+  no kernel owns has no registry to check against and is unchanged.
+- `ConservationLedger.commit` takes only a result the verifier produced. A result is a plain object a caller can write,
+  so a hand-built `PASS` used to commit a child the verifier rejects (an INFERENCE lifted to a canonical FACT on
+  authorization refs that do not exist). `IndependentVerifier.verify` now attaches a proof (`VerificationResult.proof`,
+  never serialized or compared) over the result, the record, the output and the registry it ran against. `commit`
+  refuses a result whose proof is missing or does not check, and a ledger a kernel owns also refuses one reached
+  against any other registry. The public path stays `ConservationKernel.submit`. A ledger no kernel owns takes any
+  verifier-produced result, and a custom verifier must return what `IndependentVerifier.verify` gives it, or `submit`
+  cannot commit its results.
 - `CnsRootAdmissionGate(kernel, require_evidence_guard=True)` refuses (`TERMINAL_BREACH`) a kernel built without an
   evidence guard, the way `require_guard=True` does for the root guard, so a roster that issues approvals can insist
   the kernel's registry will not take evidence from just any caller. Default `False`: the gate judges exactly as
@@ -10,9 +53,11 @@
   adding evidence, the way `root_guard` is for roots. The guard is asked with the record and permits only by answering
   exactly `True`; a raise or any other answer refuses with `InvalidEvent` and leaves the registry unchanged. A
   duplicate id is refused before the guard is asked, so a one-use permission is not spent on it. Evidence restored
-  from a snapshot is not put to the guard (`from_snapshot(..., evidence_guard=...)` guards what is added after).
-  `has_evidence_guard` says whether one is in place. With none, behaviour is exactly as before; passing a guard and a
-  registry to the kernel together is a `ValueError`, as it is for the root guard and a ledger.
+  from a snapshot is put to the guard too: it is in place before the first record loads, and a record it refuses
+  refuses the whole restore, so a file cannot plant evidence the guard would have refused.
+  `has_evidence_guard` says whether one is in place. With none, a registry behaves exactly as before; passing a guard and a
+  registry to the kernel together is a `ValueError`, as it is for the root guard and a ledger. (A kernel now needs
+  one, or `allow_unguarded_evidence=True`; see above.)
 - The kernel stamps when it decided. `ConservationKernel(clock=...)` (default:
   this machine's UTC clock) supplies the time of every decision and root
   admission; `VerificationResult.verified_at` and the ledger's

@@ -106,15 +106,15 @@ One real input cannot be expressed: a non-finite float (NaN or infinity) in a
   so: the verdict is ``TERMINAL_BREACH``, it is *unbound* (empty
   ``subject_digest``, so ``cns.gate.unbound`` names it) and its reason says
   why. It is never ``PASS``, even if a caller hands ``to_cns_result`` an
-  accepted result for it.
+  accepted result for it. The verifier leaves such a result unproven, because
+  no proof can cover a record it cannot digest.
 * ``verify`` returns an *acceptance*. A matching declaration followed by a
   second declaration for the same subject and dimension that holds the
   non-finite value is accepted, because the verifier stops at the first match.
-  The kernel then commits it. The connector still fails closed, with the same
-  unbound ``TERMINAL_BREACH``, so here the CNS verdict and the ledger
-  disagree: the ledger holds an output this verdict refuses.
-  ``submit_to_cns`` says so in the reason. This is a kernel inconsistency the
-  connector surfaces and does not fix.
+  The result is unproven, so the ledger refuses to commit it. ``submit``
+  raises ``LedgerError`` and the connector returns the same unbound
+  ``TERMINAL_BREACH``, with the ledger's refusal in the reason. The CNS verdict
+  and the ledger agree.
 * ``verify`` itself raises ``ValueError`` (the declaration matches an observed
   change, and comparing it needs the canonical form). There is no kernel
   verdict to translate, so the connector lets that error propagate unchanged.
@@ -138,7 +138,7 @@ from typing import Any
 
 from .errors import LedgerError
 from .events import TransformationRecord
-from .kernel import ConservationKernel
+from .kernel import STATEMENT_DIGEST_KEY, ConservationKernel
 from .ledger import ConservationLedger
 from .model import Artifact
 from .registry import EvidenceRegistry
@@ -542,6 +542,10 @@ class CnsRootAdmissionGate:
     ``GateResult``. It does not register the root;
     ``ConservationKernel.register_root`` does.
 
+    ``require_statement_binding=True`` refuses a root that cites evidence carrying no statement digest, so a
+    proposition's text can always be checked against the statement it cites. Default ``False``. (A digest that is
+    present and does not match the text is always refused, by ``admit_root``.)
+
     With ``require_guard=True`` the gate also refuses (``TERMINAL_BREACH``) any
     kernel built without a root guard. An approval for a root is only worth
     something if the kernel it was issued for will not register a root without
@@ -570,7 +574,8 @@ class CnsRootAdmissionGate:
     def __init__(self, kernel: ConservationKernel, *, subject: str = DEFAULT_ROOT_SUBJECT,
                  require_guard: bool = False, require_evidence_guard: bool = False,
                  accept_guard: Callable[[Any], bool] | None = None,
-                 accept_evidence_guard: Callable[[Any], bool] | None = None) -> None:
+                 accept_evidence_guard: Callable[[Any], bool] | None = None,
+                 require_statement_binding: bool = False) -> None:
         _cns_gate()  # fail here, at construction, not on first use
         _require_subject(subject)
         for name, predicate in (("accept_guard", accept_guard), ("accept_evidence_guard", accept_evidence_guard)):
@@ -582,6 +587,7 @@ class CnsRootAdmissionGate:
         self._subject = subject
         self._require_guard = require_guard
         self._require_evidence_guard = require_evidence_guard
+        self._require_statement_binding = require_statement_binding
 
     @property
     def position(self) -> Any:
@@ -614,6 +620,13 @@ class CnsRootAdmissionGate:
                                  "caller and a root can cite a record nobody vouched for")
         reasons = (*reasons, *self._unaccepted("root", self._kernel.root_guard, self._accept_guard),
                    *self._unaccepted("evidence", self._kernel.evidence_guard, self._accept_evidence_guard))
+        if self._require_statement_binding:
+            unbound = sorted({ref for prop in candidate.propositions for ref in prop.evidence_refs
+                              if (record := self._kernel.registry.evidence(ref)) is not None
+                              and STATEMENT_DIGEST_KEY not in record.detail})
+            if unbound:
+                reasons = (*reasons, "cites evidence that carries no statement digest, so its text cannot be bound "
+                                     f"to the statement it records: {unbound}")
         return admission_to_cns_result(reasons, candidate, subject=self._subject)
 
 

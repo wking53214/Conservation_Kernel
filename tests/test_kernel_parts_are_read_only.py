@@ -33,12 +33,12 @@ def test_the_registry_cannot_be_replaced_after_construction():
 
 
 def test_the_parts_are_still_there_to_read_and_use():
-    kernel = ConservationKernel(allow_unguarded_roots=True)
+    kernel = ConservationKernel(allow_unguarded_evidence=True, allow_unguarded_roots=True)
     assert isinstance(kernel.ledger, ConservationLedger) and isinstance(kernel.registry, EvidenceRegistry)
 
 
 def test_a_kernel_restored_from_a_snapshot_keeps_the_parts_it_was_given():
-    kernel = ConservationKernel(allow_unguarded_roots=True)
-    again = ConservationKernel.from_snapshot(kernel.snapshot(), allow_unguarded_roots=True)
+    kernel = ConservationKernel(allow_unguarded_evidence=True, allow_unguarded_roots=True)
+    again = ConservationKernel.from_snapshot(kernel.snapshot(), allow_unguarded_roots=True, allow_unguarded_evidence=True)
     with pytest.raises(AttributeError):
         again.ledger = ConservationLedger()

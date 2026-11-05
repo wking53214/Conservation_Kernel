@@ -165,6 +165,11 @@ class AuthorizationEvent(_Window):
     #: The delegation this was issued under, when its author holds the power to authorize by delegation rather than
     #: by being trusted directly. It counts only while every link of that delegation's chain is in force and covers it.
     under_delegation: str | None = None
+    #: What this authorization is about: the `Proposition.canonical_digest` of the words the human approved. When set,
+    #: the authorization counts only for a proposition with that digest, so one approval of "Refund customer $10." cannot
+    #: stand in for "Refund customer $10,000,000.". Optional, so an authorization without one is judged as it always was;
+    #: a registry built with `require_content_bound` refuses one without.
+    subject_digest: str | None = None
 
     def __post_init__(self) -> None:
         if not self.authorization_id.strip():
@@ -188,6 +193,9 @@ class AuthorizationEvent(_Window):
         if self.under_delegation is not None and (not isinstance(self.under_delegation, str)
                                                   or not self.under_delegation.strip()):
             raise InvalidEvent("under_delegation must be a delegation id or None")
+        if self.subject_digest is not None and (not isinstance(self.subject_digest, str)
+                                                or not self.subject_digest.strip()):
+            raise InvalidEvent("subject_digest must be a proposition digest or None")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -204,6 +212,7 @@ class AuthorizationEvent(_Window):
             **({"valid_from": self.valid_from} if self.valid_from is not None else {}),
             **({"valid_until": self.valid_until} if self.valid_until is not None else {}),
             **({"under_delegation": self.under_delegation} if self.under_delegation is not None else {}),
+            **({"subject_digest": self.subject_digest} if self.subject_digest is not None else {}),
         }
 
     @classmethod
@@ -225,6 +234,7 @@ class AuthorizationEvent(_Window):
             valid_from=data.get("valid_from"),
             valid_until=data.get("valid_until"),
             under_delegation=data.get("under_delegation"),
+            subject_digest=data.get("subject_digest"),
         )
 
 
