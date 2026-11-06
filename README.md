@@ -81,9 +81,9 @@ Measured 2026-10-31 at main `c51a246`, Python 3.13.
 | Version | 0.3.0 (`pyproject.toml` and `__version__`). `ConservationKernel.version` still reads 0.2.0 and is what snapshots record as `kernel_version`; the two have not been brought together. |
 | Tag and GitHub Release | None yet. The changelog has no 0.2.0 or 0.3.0 heading; both are under Unreleased. Tagging is the owner's decision. |
 | CI on main | Green (tests on Python 3.11 and 3.12, with and without CNS, plus ruff 0.15.22) |
-| Tests | Without CNS importable: 250 passed, 2 skipped, 0 failed (`python3 -m pytest -q` with `cns`, `cns_interop` and `cns_composition` blocked). With CNS installed: 396 passed, 0 failed, 0 skipped (396 collected), measured on Python 3.11, 3.12 and 3.13 on 2026-10-31. Not re-measured: GitHub Actions status. |
+| Tests | Without CNS importable: 281 passed, 4 skipped, 0 failed (`python3 -m pytest -q` with CNS not on the import path). With CNS installed: 436 passed, 0 failed, 0 skipped (measured 2026-11-06 on Python 3.13 at `44130f4`; earlier figures of 2026-10-31 on 3.11 to 3.13 are superseded). Not re-measured: GitHub Actions status. |
 | Known failing tests | None with CNS installed. The seven failures recorded before 2026-10-31 came from the verifier's proof stamp crashing on records holding NaN or infinity (six tests) and from `add_initial` checking parents before root admission (one test); both are fixed on this branch. |
-| CNS pin | `pyproject.toml` pins the optional `cns` extra to tag v2.3.0 (an earlier version of this README, and the comment in `pyproject.toml`, still say v2.2.0). |
+| CNS pin | `pyproject.toml` pins the optional `cns` extra to tag v2.3.0, and its comment says so. |
 
 ### Which doors write, and what protects each
 
