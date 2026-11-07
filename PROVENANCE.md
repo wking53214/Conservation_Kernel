@@ -81,6 +81,14 @@ does not carry a misleading green:
   subject-binding invariant with real blast radius (`has_active_evidence`
   already enforces subject binding elsewhere), so it is a design decision, not
   a mechanical fix.
+
+  Status check (2026-11-06): `test_attack_11_evidence_subject_binding` replaces the
+  target's own evidence with foreign evidence. That attempt is rejected as
+  `EVIDENCE_LOSS`, not by subject binding, so the test does not cover this case.
+  A scratch probe that added foreign evidence while keeping the target's own
+  evidence returned `PASS_WITH_DECLARED_TRANSFORMATION`. The transition vocabulary
+  has no evidence-addition kind, so the probe used the redaction kind; that gap
+  belongs to the open design decision. #10 remains open.
 - **#13 historical-content mutation**, silently changing the `text` of a
   `FACT` proposition whose temporal scope is `HISTORICAL`. The verifier
   observes proposition content as a SHA-256 digest and has no rule protecting
