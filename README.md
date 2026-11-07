@@ -41,7 +41,7 @@ INPUT ARTIFACT + DECLARED CHANGE + OBSERVED EFFECTS + EVIDENCE/AUTH REGISTRY
 
 - **`Proposition` / `Artifact`**: proposition-oriented envelope. Wording may change while each proposition keeps explicit epistemic/authority/origin state. Canonical JSON → SHA-256 (`canonical_json` / `_digest`). Sets forbidden; non-finite floats forbidden.
 - **`IndependentVerifier`**: recomputes observed changes; **never trusts the declaration string**. Undeclared shifts → REJECT.
-- **`EvidenceRegistry`**: external witness. Source-reference changes require a registered source observation.
+- **`EvidenceRegistry`**: external witness. Any change to a proposition's source references is refused (`SOURCE_SUBSTITUTION_UNVERIFIED`), and a registered source observation does not approve it. Registered source observations are required before a proposition can be made canonical.
 - **`AuthorizationEvent`**: checked, not issued. If the transformer can write the authorization registry, independence is gone (`docs/LIMITATIONS.md`).
 - **Authorization lifecycle**: an authorization may hold for a window (`valid_from`, `valid_until`), be ended by a `RevocationEvent` from a moment forward (never backward), or be issued under a `DelegationEvent` that lets a named delegate authorize listed subjects, kinds of change and target values (re-delegation only narrower, at most 3 links). All of it is judged as of the kernel's clock (`ConservationKernel(clock=...)`), stamped on every decision and root admission, so a restore re-verifies history as of when it was decided. `EvidenceRegistry(require_bounded=True)` refuses anything open-ended.
 - **`ConservationLedger`**: append-only **by API**, in-memory. SHA-256 detects inconsistency on recompute; it is not a tamper-proof durable store.

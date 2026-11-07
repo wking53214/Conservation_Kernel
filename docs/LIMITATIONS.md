@@ -32,9 +32,13 @@ transformation written straight to the ledger (not through the kernel) carries
 no time until the kernel first re-verifies it, so a revocation recorded before
 that reload reaches it.
 
-The verifier is conservative. It rejects source-reference changes unless a
-registered source observation supports them, and it does not infer that a
-human-authored container makes embedded machine material human-originated.
+The verifier is conservative. Any change to a proposition's source references
+is refused, because the kernel has no independent source-identity protocol, and
+a registered source observation does not override that refusal. Removing source
+references entirely is refused as well. Registered source observations are
+required before a proposition can be made canonical. The verifier also does not
+infer that a human-authored container makes embedded machine material
+human-originated.
 
 The control/treatment run is deterministic and uses simulated transformers.
 It demonstrates the mechanics of measurement, not a population-level claim
