@@ -18,7 +18,7 @@ independent evidence are supplied through a separate registry.
   authorization registry;
 - objective truth about the external world;
 - stopping an application that bypasses the kernel entirely;
-- cryptographic signatures, key custody, or tamper-proof persistence;
+- key custody, non-repudiation, or tamper-proof persistence (snapshot signing from 0.3.0 gives authenticity for a deployed key only, not a grant protocol);
 - semantic equivalence of arbitrary natural-language content.
 
 Those limitations are not hidden success conditions. A production deployment
@@ -26,6 +26,6 @@ would need a protocol or gateway boundary, separate custody for the event
 registry, and an independent persistence/witness design.
 
 The gateway boundary specifically now has a working reference implementation
-outside this repo — see [`GATEWAY.md`](GATEWAY.md). It does not change what
+outside this repo, see [`GATEWAY.md`](GATEWAY.md). It does not change what
 this kernel does or bring bypass into scope; it records what a sound choke
 point looks like and that one has been built and tested against this kernel.

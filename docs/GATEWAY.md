@@ -2,14 +2,14 @@
 
 This kernel enforces conservation only at the boundary where it is invoked. A
 caller who never submits a transformation stays outside the mechanism. Making
-enforcement mandatory needs a transport boundary — a choke point that every
+enforcement mandatory needs a transport boundary, a choke point that every
 downstream artifact must pass through. That is out of scope here (see
 [`THREAT_MODEL.md`](THREAT_MODEL.md), [`REPORT.md`](REPORT.md) where "a
 library alone prevents bypass" is `FALSIFIED`).
 
 This document records that the boundary now has a **working reference
 implementation** outside this repository, and the design points that make it
-work — so the "would need a gateway" statement is no longer purely
+work, so the "would need a gateway" statement is no longer purely
 hypothetical.
 
 ## Reference implementation
@@ -18,7 +18,7 @@ hypothetical.
 `ConservationGateway` (`transport/gems_transport/transport.py`) wraps this
 kernel as the only accepted-artifact boundary; `Pipeline` only forwards
 artifacts the gateway accepted. It is unwired salvage there, has no unit
-tests, and is verified only by an experiment — but the experiment runs
+tests, and is verified only by an experiment, but the experiment runs
 against the current kernel and is reproducible.
 
 Result against this kernel (`dbbb22b`):
@@ -42,7 +42,7 @@ Three properties, all present in the reference implementation:
 2. **The gateway resolves the input artifact from its own accepted-artifact
    map**, not from whatever the request declares its input to be. A request
    cannot name an artifact the gateway never accepted.
-3. **Only one path promotes a candidate** — the gateway's `submit()`, and
+3. **Only one path promotes a candidate**, the gateway's `submit()`, and
    only if the kernel accepts. There is no side door that writes to the
    accepted set.
 

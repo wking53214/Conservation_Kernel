@@ -14,7 +14,7 @@ It is **not** an archived AI-chat transcript, and it does not follow this
 account's `PROVENANCE.md` + `TRANSCRIPT.md` archival convention. There is no
 source conversation to preserve. The code here is written, tested, and revised
 as normal software. A future housekeeping pass should treat it as a live
-project — fix real bugs, keep the suite green — not as evidentiary material to
+project, fix real bugs, keep the suite green, not as evidentiary material to
 be left untouched.
 
 ## Origin
@@ -22,8 +22,8 @@ be left untouched.
 The project was created after a reconnaissance pass over sibling repositories
 (`CCC`, `Triad-42`, `innovation_os`, `sentinel_os`, `GSA-815`, `synapsis`,
 `resume_os`, `Ecology`) to check whether any existing checkout was a suitable
-home for a cross-repository transition verifier. The conclusion — recorded in
-[`docs/ARCHITECTURE_ASSESSMENT.md`](docs/ARCHITECTURE_ASSESSMENT.md) — was to
+home for a cross-repository transition verifier. The conclusion, recorded in
+[`docs/ARCHITECTURE_ASSESSMENT.md`](docs/ARCHITECTURE_ASSESSMENT.md), was to
 build a dedicated project that imports none of them, so that a passing test
 demonstrates independent verification rather than correct use of an existing
 manager.
@@ -32,29 +32,30 @@ manager.
 
 | Date | Milestone |
 | --- | --- |
-| 2026-08-17 | `d6c67dc` — initial hostile baseline: typed artifact/proposition model, independent verifier, external evidence/authorization registry, append-only in-memory ledger, reconstruction engine, 10-boundary control/treatment experiment. |
+| 2026-08-17 | `d6c67dc`, initial hostile baseline: typed artifact/proposition model, independent verifier, external evidence/authorization registry, append-only in-memory ledger, reconstruction engine, 10-boundary control/treatment experiment. |
 | 2026-08-18 | `2260320` freeze, then hostile attacks #7 (cross-subject authorization replay), #8 (recursive self-verification), #9 (provenance forgery) added to the corpus and test suite. |
-| 2026-08-24 | `d91e5cd`, `6290f4d` — README expanded into a full conceptual overview. |
-| 2026-08-27 | Housekeeping: `LICENSE` (Apache-2.0), this file, description alignment, README tightened; hostile attacks #11/#12/#14 landed (kernel already enforced them — test-only additions). Attacks #10 and #13 deferred pending an invariant design decision (see below). |
+| 2026-08-24 | `d91e5cd`, `6290f4d`, README expanded into a full conceptual overview. |
+| 2026-08-27 | Housekeeping: `LICENSE` (Apache-2.0), this file, description alignment, README tightened; hostile attacks #11/#12/#14 landed (kernel already enforced them, test-only additions). Attacks #10 and #13 deferred pending an invariant design decision (see below). |
 
 ## What is real vs. aspirational
 
 The repository is candid about its own limits. Do not infer more from the
 README's scope than the following documents support:
 
-- [`docs/REPORT.md`](docs/REPORT.md) — every claim classified as
+- [`docs/REPORT.md`](docs/REPORT.md), every claim classified as
   `TEST-VERIFIED`, `FALSIFIED`, or `UNVERIFIED`. Notably `FALSIFIED`: "the
   mechanism independently verifies truth" and "a library alone prevents bypass
   by a downstream system".
-- [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) — the in-memory ledger is
+- [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md), the in-memory ledger is
   append-only *by API only*, not tamper-proof; SHA-256 is used for
-  deterministic identity and change detection, **not** for signatures,
-  custody, or authenticity.
-- [`docs/HOSTILE_REVIEW.md`](docs/HOSTILE_REVIEW.md) — 20 adversarial
+  deterministic identity and change detection. Snapshots can be signed from 0.3.0
+  for authenticity under a deployed key; the ledger itself has no custody or
+  tamper-proof guarantee.
+- [`docs/HOSTILE_REVIEW.md`](docs/HOSTILE_REVIEW.md), 20 adversarial
   questions answered against the implementation, several with `FALSIFIED` or
   `UNVERIFIED`.
-- [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) — explicit out-of-scope list.
-- [`docs/GATEWAY.md`](docs/GATEWAY.md) — the transport boundary is out of
+- [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md), explicit out-of-scope list.
+- [`docs/GATEWAY.md`](docs/GATEWAY.md), the transport boundary is out of
   scope for the library; it now has a working reference implementation
   elsewhere, tested against this kernel. That does not move bypass into
   scope here.
@@ -72,7 +73,7 @@ invariant held and the transformation was rejected.
 Two attacks are **deferred**, not solved, and are kept out of the suite so it
 does not carry a misleading green:
 
-- **#10 cross-subject evidence replay** — attaching evidence whose registry
+- **#10 cross-subject evidence replay**, attaching evidence whose registry
   subject is proposition A to proposition B. `_check_evidence_refs` and
   `_check_evidence_change` currently test only presence and `active`, not the
   evidence record's `subject_id`, so a cross-subject attachment is accepted
@@ -80,7 +81,7 @@ does not carry a misleading green:
   subject-binding invariant with real blast radius (`has_active_evidence`
   already enforces subject binding elsewhere), so it is a design decision, not
   a mechanical fix.
-- **#13 historical-content mutation** — silently changing the `text` of a
+- **#13 historical-content mutation**, silently changing the `text` of a
   `FACT` proposition whose temporal scope is `HISTORICAL`. The verifier
   observes proposition content as a SHA-256 digest and has no rule protecting
   historical content specifically; a correctly declared content change is
@@ -89,7 +90,7 @@ does not carry a misleading green:
 
 The gateway reference implementation noted in
 [`docs/GATEWAY.md`](docs/GATEWAY.md) carries its own attack corpus that
-exercises adjacent cases at the transport layer — `HISTORICAL_REWRITE`,
+exercises adjacent cases at the transport layer, `HISTORICAL_REWRITE`,
 `PROVENANCE_MISMATCH`, `METADATA_FORGERY`. That is independent corroboration
 that #10 and #13 name real gaps, not a substitute for the kernel-level
 invariant decision they still need.
