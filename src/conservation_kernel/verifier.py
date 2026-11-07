@@ -516,6 +516,12 @@ class IndependentVerifier:
         refs = tuple(dict.fromkeys((*new.evidence_refs, *record.evidence_refs)))
         subject_ids = {new.proposition_id, *new.parent_proposition_ids}
         self._check_evidence_refs(new, refs, registry, violation)
+        # Evidence on a new proposition must be about it or one of its parents, the same rule the
+        # addition check applies to existing propositions (attack #10).
+        own_subjects = {new.proposition_id, *new.parent_proposition_ids}
+        foreign = [ref for ref in new.evidence_refs if (item := registry.evidence(ref)) is not None and item.subject_id not in own_subjects]
+        if foreign:
+            violation("FOREIGN_EVIDENCE_ADDED", Dimension.EVIDENCE, new.proposition_id, f"evidence about another subject cannot be attached to a new proposition: {foreign}")
         if new.epistemic_status in STRONG_EPISTEMIC:
             if not registry.has_active_evidence(refs, subject_ids=subject_ids, kinds={EvidenceKind.INDEPENDENT_VERIFICATION}, independent=True):
                 violation("NEW_STRONG_CLAIM_UNVERIFIED", Dimension.EPISTEMIC_STATUS, new.proposition_id, "new fact/observation requires independent verification")
