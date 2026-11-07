@@ -74,15 +74,15 @@ Natural-language semantic equivalence is **unverifiable** when content changes. 
 
 ### Release and test status
 
-Measured 2026-10-31 at main `c51a246`, Python 3.13.
+Test figures below were measured 2026-11-06 on Python 3.13; each row states its own date.
 
 | What | State |
 |---|---|
 | Version | 0.3.0 (`pyproject.toml` and `__version__`). `ConservationKernel.version` still reads 0.2.0 and is what snapshots record as `kernel_version`; the two have not been brought together. |
 | Tag and GitHub Release | None yet. The changelog has no 0.2.0 or 0.3.0 heading; both are under Unreleased. Tagging is the owner's decision. |
 | CI on main | Green (tests on Python 3.11 and 3.12, with and without CNS, plus ruff 0.15.22) |
-| Tests | Without CNS importable: 281 passed, 4 skipped, 0 failed (`python3 -m pytest -q` with CNS not on the import path). With CNS installed: 436 passed, 0 failed, 0 skipped (measured 2026-11-06 on Python 3.13 at `44130f4`; earlier figures of 2026-10-31 on 3.11 to 3.13 are superseded). Not re-measured: GitHub Actions status. |
-| Known failing tests | None with CNS installed. The seven failures recorded before 2026-10-31 came from the verifier's proof stamp crashing on records holding NaN or infinity (six tests) and from `add_initial` checking parents before root admission (one test); both are fixed on this branch. |
+| Tests | Without CNS importable: 281 passed, 4 skipped, 0 failed (`python3 -m pytest -q` with CNS not on the import path). With CNS installed: 436 passed, 0 failed, 0 skipped (measured 2026-11-06 on Python 3.13 at main `4ac1de0`; earlier figures of 2026-10-31 on 3.11 to 3.13 are superseded). Not re-measured: GitHub Actions status. |
+| Known failing tests | None with CNS installed. The seven failures recorded before 2026-10-31 came from the verifier's proof stamp crashing on records holding NaN or infinity (six tests) and from `add_initial` checking parents before root admission (one test); both are fixed on main. |
 | CNS pin | `pyproject.toml` pins the optional `cns` extra to tag v2.3.0, and its comment says so. |
 
 ### Which doors write, and what protects each
@@ -152,8 +152,8 @@ HERALD ──signed export──> TIE ──evidence──> Conservation_Kernel 
 
 **Responsibilities (this repo).**
 - Recompute observed changes and reject undeclared shifts in protected dimensions (`verifier.py`).
-- Judge a root before it is registered (`ConservationKernel.admit_root`, `kernel.py:114`; `register_root`, `kernel.py:172`).
-- Hold the evidence and authorization registries and the append-only in-memory ledger (`registry.py`, `ledger.py`), and snapshot and reload them (`kernel.py:223`, `kernel.py:311`).
+- Judge a root before it is registered (`ConservationKernel.admit_root`, `register_root`).
+- Hold the evidence and authorization registries and the append-only in-memory ledger (`registry.py`, `ledger.py`), and snapshot and reload them.
 
 **Inputs and outputs.** In: an input `Artifact`, a `TransformationRecord` with declared changes, an output `Artifact`, evidence and authorization events. Out: a `VerificationResult` (`PASS`, `PASS_WITH_DECLARED_TRANSFORMATION`, `REJECT`, `UNVERIFIABLE`), ledger entries, and signed snapshots. For roots, the list of refusals from `admit_root`.
 
@@ -169,11 +169,11 @@ HERALD ──signed export──> TIE ──evidence──> Conservation_Kernel 
 **Integration with the spine seats.** The kernel has no import of HERALD, TIE, Governance_Gateway, CCC, CCCb or Link (grep of `src/` and `docs/` found none; `docs/GATEWAY.md` names GEMS, not Governance_Gateway, as a reference gateway). TIE and HERALD reach the kernel only through the spine script: the script builds the kernel with `root_guard=DecisionGuard(...)` (`chains/evidence_spine.py:237`, `fresh_guard` at 377) and an `evidence_guard=tie_evidence_guard(...)` (`chains/evidence_spine.py:209`, `239`). Those guards are written in CNS's script, not here. As read on 2026-10-31 from `/home/user/CNS`; the spine's own run was not repeated for this README (CNS recorded 30 results, all ok, and one stated GAP, on 2026-10-30).
 
 **CNS interaction: partial.**
-- Implemented, optional, one direction: `conservation_kernel/cns_connector.py` loads `cns.gate` lazily by `importlib.import_module` (`cns_connector.py:133`, `186`) and expresses verdicts as `GateResult`s: `CnsGate` (OMEGA, `cns_connector.py:489`), `CnsRootAdmissionGate` (ALPHA, `cns_connector.py:536`), `verify_to_cns` (`:604`), `submit_to_cns` (`:624`). Nothing in `kernel.py`, `verifier.py` or `ledger.py` imports CNS, and `tests/test_cns_independence.py` covers loading without it.
+- Implemented, optional, one direction: `conservation_kernel/cns_connector.py` loads `cns.gate` lazily by `importlib.import_module` and expresses verdicts as `GateResult`s: `CnsGate` (OMEGA), `CnsRootAdmissionGate` (ALPHA), `verify_to_cns`, `submit_to_cns`. Nothing in `kernel.py`, `verifier.py` or `ledger.py` imports CNS, and `tests/test_cns_independence.py` covers loading without it.
 - Used by the spine: CNS's `evidence_spine.py` builds `CnsRootAdmissionGate(kernel, require_guard=True, require_evidence_guard=True)` as the Conservation_Kernel seat (`chains/evidence_spine.py:476`, `922`). The spine does not use this repo's `CnsGate` (its `CnsGate` import at line 142 is Governance_Gateway's).
 - Not implemented: `cns_interop` (UAI-1 signed messages) and `cns_composition` are not imported anywhere in this repo (absent). The kernel does not sign or verify UAI-1 messages itself; `signing.py` signs snapshots only.
 - Not paired: `cns_chain(...).complete()` is `False` by design (Section 8).
-- Known gap: 7 connector tests fail today (Release and test status, above).
+- No connector tests fail. Without CNS installed they are skipped; with the pinned CNS all pass (see Release and test status).
 
 Docs: `docs/INVARIANTS.md`, `docs/THREAT_MODEL.md`, `docs/LIMITATIONS.md`, `docs/HOSTILE_REVIEW.md`.
 
@@ -185,7 +185,7 @@ present, `conservation_kernel.cns_connector` expresses the kernel's verdicts as
 CNS gate results so they can be resolved alongside gates from other
 repositories. The kernel's own verdicts and behavior are unchanged.
 
-The `cns` extra pins CNS by git tag (v2.2.0), which PyPI does not accept, so this
+The `cns` extra pins CNS by git tag (v2.3.0), which PyPI does not accept, so this
 package is installed from git or from a checkout rather than from an index:
 
 ```
