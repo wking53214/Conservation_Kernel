@@ -37,8 +37,9 @@ the anti-self-ratification rule; the verifier ignores it.
 
 `EvidenceRegistry` is a separate witness boundary. A model can name an
 authorization ID, but a model-created object with that ID is not an
-authorization. Only a registered event created by a human actor can satisfy
-human authorization checks. Likewise, independent verification cannot be
+authorization. Only a registered event from a human can satisfy human authorization checks.
+The kernel checks who may register such events only when the deployer sets
+`trusted_humans`; with it unset, any actor ID is accepted. Likewise, independent verification cannot be
 provided by a model.
 
 ## Result semantics
