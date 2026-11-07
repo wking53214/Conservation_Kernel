@@ -70,25 +70,9 @@ The hostile corpus in `src/conservation_kernel/experiments.py` and the
 attack tries to produce a *false acceptance*; a passing test means the
 invariant held and the transformation was rejected.
 
-Two attacks are **deferred**, not solved, and are kept out of the suite so it
+One attack is **deferred**, not solved, and is kept out of the suite so it
 does not carry a misleading green:
 
-- **#10 cross-subject evidence replay**, attaching evidence whose registry
-  subject is proposition A to proposition B. `_check_evidence_refs` and
-  `_check_evidence_change` currently test only presence and `active`, not the
-  evidence record's `subject_id`, so a cross-subject attachment is accepted
-  today when no epistemic promotion is involved. Catching it requires a new
-  subject-binding invariant with real blast radius (`has_active_evidence`
-  already enforces subject binding elsewhere), so it is a design decision, not
-  a mechanical fix.
-
-  Status check (2026-11-06): `test_attack_11_evidence_subject_binding` replaces the
-  target's own evidence with foreign evidence. That attempt is rejected as
-  `EVIDENCE_LOSS`, not by subject binding, so the test does not cover this case.
-  A scratch probe that added foreign evidence while keeping the target's own
-  evidence returned `PASS_WITH_DECLARED_TRANSFORMATION`. The transition vocabulary
-  has no evidence-addition kind, so the probe used the redaction kind; that gap
-  belongs to the open design decision. #10 remains open.
 - **#13 historical-content mutation**, silently changing the `text` of a
   `FACT` proposition whose temporal scope is `HISTORICAL`. The verifier
   observes proposition content as a SHA-256 digest and has no rule protecting
@@ -96,12 +80,19 @@ does not carry a misleading green:
   accepted as `PASS_WITH_DECLARED_TRANSFORMATION`. Whether historical content
   should be a protected dimension is an open invariant question.
 
+#10 (cross-subject evidence replay) was closed on 2026-11-06. Attaching evidence whose
+registry subject is another proposition used to be accepted when no epistemic status
+changed. The verifier now refuses newly attached evidence unless its subject is the
+proposition itself or one of its parents (`FOREIGN_EVIDENCE_ADDED`). Attack #11 covers
+a different case, replacement of the target's own evidence. `tests/test_attack_10_evidence_addition_binding.py`
+covers the addition case.
+
 The gateway reference implementation noted in
 [`docs/GATEWAY.md`](docs/GATEWAY.md) carries its own attack corpus that
 exercises adjacent cases at the transport layer, `HISTORICAL_REWRITE`,
 `PROVENANCE_MISMATCH`, `METADATA_FORGERY`. That is independent corroboration
-that #10 and #13 name real gaps, not a substitute for the kernel-level
-invariant decision they still need.
+that #13 names a real gap, not a substitute for the kernel-level
+invariant decision it still needs.
 
 ## Related investigation
 

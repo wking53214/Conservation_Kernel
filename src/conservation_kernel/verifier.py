@@ -444,6 +444,17 @@ class IndependentVerifier:
             missing = registry.missing_refs(tuple(new_refs - old_refs))
             if missing:
                 violation("ADDED_EVIDENCE_NOT_REGISTERED", Dimension.EVIDENCE, new.proposition_id, f"new evidence refs are not in the external registry: {missing}")
+        # Evidence attached by this transformation must be about this proposition or one of its
+        # parents (the same subjects the epistemic checks accept). Evidence about an unrelated
+        # proposition is a cross-subject replay, even when no epistemic status changes.
+        own_subjects = {new.proposition_id, *new.parent_proposition_ids}
+        foreign = []
+        for ref in sorted(new_refs - old_refs):
+            item = registry.evidence(ref)
+            if item is not None and item.subject_id not in own_subjects:
+                foreign.append(ref)
+        if foreign:
+            violation("FOREIGN_EVIDENCE_ADDED", Dimension.EVIDENCE, new.proposition_id, f"evidence about another subject cannot be attached to this proposition: {foreign}")
         if new.epistemic_status in STRONG_EPISTEMIC:
             active_records = [registry.evidence(ref) for ref in new.evidence_refs]
             active_records = [item for item in active_records if item is not None and item.active]
