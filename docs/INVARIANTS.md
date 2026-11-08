@@ -29,3 +29,23 @@
    functional validation record.
 16. Initial registration does not retroactively prove a proposition; the
    verifier evaluates transformations and records its bounded scope.
+17. A proposition's source references cannot change. A change is refused
+   (`SOURCE_SUBSTITUTION_UNVERIFIED`), and a registered source observation does
+   not override the refusal. Removing source references is refused
+   (`PROVENANCE_STRIPPED`).
+18. Evidence attached to a proposition must be about that proposition or one of
+   its parents. Foreign evidence added to an existing or new proposition is
+   refused (`FOREIGN_EVIDENCE_ADDED`).
+19. A proposition cannot become canonical without registered source
+   observations and supporting evidence (`CANONICAL_WITHOUT_EVIDENCE`). A new
+   proposition must be rooted (`UNROOTED_NEW_PROPOSITION`).
+20. A proposition's conditions cannot be dropped or reworded without a human
+   `SCOPE_WIDENING` authorization (`UNAUTHORIZED_SCOPE_WIDENING`). A derivation
+   cannot omit a parent's condition (`CONDITION_DROPPED_IN_DERIVATION`).
+21. Authorizations are judged against the kernel's clock. Windows apply,
+   revocation takes effect only from the time it is recorded, and delegation can
+   only narrow on re-delegation.
+22. Root admission and evidence registration require their guards to answer
+   exactly `True`. A kernel without a guard must opt out explicitly.
+
+Items 17 to 22 were added to match the current code. Items 1 to 16 are unchanged.
