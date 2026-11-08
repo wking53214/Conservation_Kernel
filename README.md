@@ -92,7 +92,7 @@ Known gaps:
 | Times on roots and transformations | Set by the kernel's clock. There is no public door to stamp a time. |
 | `from_snapshot`, `load` | Digest check and re-verification. A signature is checked only if the loader passes a signer. |
 
-Evidence is the first open door to get an optional caller permission, because the verifier trusts evidence to approve strong claims. Whether `submit` should get one too is an open decision for the owner. The CNS evidence spine does not yet pass an evidence guard.
+Evidence is the first open door to get an optional caller permission, because the verifier trusts evidence to approve strong claims. Whether `submit` should get one too is an open decision for the owner. The CNS evidence spine does pass an evidence guard (TIE's `tie_evidence_guard`, built in the spine script). Whether that guard is independently trustworthy is a deployment question this repo does not prove.
 
 ## 5. Status and tests
 

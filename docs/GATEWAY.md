@@ -42,16 +42,17 @@ unavoidable for anything downstream.
 
 ## What makes a gateway sound
 
-Three properties, all present in the reference implementation:
+Three properties a sound gateway needs. A 2026-11-08 read of GEMS' transport code confirmed the first two. The third needs qualifying, as noted below:
 
 1. **A transformer's output is an untrusted proposal, never an accepted
    artifact.** It becomes an artifact only after the kernel accepts it.
 2. **The gateway resolves the input artifact from its own accepted-artifact
    map**, not from whatever the request declares its input to be. A request
    cannot name an artifact the gateway never accepted.
-3. **Only one path promotes a candidate**, the gateway's `submit()`, and
-   only if the kernel accepts. There is no side door that writes to the
-   accepted set.
+3. **Only one path promotes a candidate**: the gateway's `submit()`, and only
+   if the kernel accepts. Source roots are the exception. They enter through a
+   separate ingest path that admits only parentless artifacts, after the kernel's
+   root admission has accepted them.
 
 A gateway missing any of these re-opens the bypass it was meant to close.
 
