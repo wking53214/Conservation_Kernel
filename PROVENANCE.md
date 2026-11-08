@@ -36,6 +36,11 @@ manager.
 | 2026-08-18 | `2260320` freeze, then hostile attacks #7 (cross-subject authorization replay), #8 (recursive self-verification), #9 (provenance forgery) added to the corpus and test suite. |
 | 2026-08-24 | `d91e5cd`, `6290f4d`, README expanded into a full conceptual overview. |
 | 2026-08-27 | Housekeeping: `LICENSE` (Apache-2.0), this file, description alignment, README tightened; hostile attacks #11/#12/#14 landed (kernel already enforced them, test-only additions). Attacks #10 and #13 deferred pending an invariant design decision (see below). |
+| 2026-11-07 | PRs #38 to #41: README, LIMITATIONS and docs accuracy pass; attack #10 recorded as open with an addition-case probe (#41). |
+| 2026-11-07 | PR #42 refuses evidence about another subject when it is attached (attack #10 closed in code). PR #43 applies the same rule to new propositions. |
+| 2026-11-08 | PR #44 README trimmed to the spine position; PR #45 audit reconciliation; PR #46 kernel version set to 0.3.0 to match the package. |
+| 2026-11-08 | PR #47 verification currency; PR #48 GEMS 20/20 result labeled historical; PR #49 integration statements corrected; PR #50 invariants and hostile-review status. |
+| current | main at `75e1e32`. CI green on that commit. Test counts (285 passed and 4 skipped without CNS; 440 passed with CNS) were measured at `00b0031`. |
 
 ## What is real vs. aspirational
 
@@ -83,7 +88,7 @@ does not carry a misleading green:
   accepted as `PASS_WITH_DECLARED_TRANSFORMATION`. Whether historical content
   should be a protected dimension is an open invariant question.
 
-#10 (cross-subject evidence replay) was closed on 2026-11-06. Attaching evidence whose
+#10 (cross-subject evidence replay) was closed in code on 2026-11-07 (PR #42); it had been recorded as open on the same day in PR #41. Attaching evidence whose
 registry subject is another proposition used to be accepted when no epistemic status
 changed. The verifier now refuses newly attached evidence unless its subject is the
 proposition itself or one of its parents (`FOREIGN_EVIDENCE_ADDED`). Attack #11 covers

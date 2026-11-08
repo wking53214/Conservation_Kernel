@@ -7,7 +7,7 @@ Status note: the findings below are dated to the review that produced them, and 
 Status as of 2026-11-08, by finding number:
 
 - **Still true (open):** 1 (a gateway is still needed to stop bypass), 2 (registry independence is a deployment property), 6 and 17 (durable custody and deletion custody are not implemented), 12 (there is no verifier of the verifier), 13 (multi-source adjudication is not implemented), 18 (a downstream system that ignores the envelope is not stopped), 20 (arbitrary semantic meaning is not verified).
-- **Addressed since:** 4 and 19 (source-reference changes are refused; unrooted submissions are rejected), 5, 7, and 8 (typed transitions and their tests), 14 and 16 (positive and reconstruction tests). Items 17 to 22 in `INVARIANTS.md` cover the newer rules.
+- **Addressed since:** 4 (removing source references is refused). 19 is closed only for the case where an unrooted artifact is submitted. A downstream caller that never submits anything still bypasses the kernel, as finding 1 says. Also 5, 7, and 8 (typed transitions and their tests), and 14 and 16 (positive and reconstruction tests). The newer rules are in `INVARIANTS.md` under the source-reference, foreign-evidence, canonical-and-rooted, scope-widening, authorization-clock, and guard rules.
 - **Historical figures, not current:** the experiment counts in 9, and the ten-transformation fixture in 16. Their current state is in `docs/REPORT.md`.
 
 1. **Can a Gem bypass the kernel?** Yes. A caller can construct an artifact
