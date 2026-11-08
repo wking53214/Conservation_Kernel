@@ -25,7 +25,7 @@ Wider pipeline: the kernel sits after the policy decision and before trusted dow
 
 The kernel asks one question: *did this transformation preserve protected epistemic and provenance distinctions, or did it silently change one of them?* It does not ask whether a claim is true, whether a request is permitted, or whether a human authorized it. It checks registered authorization events. It does not issue them.
 
-Cross-repo wiring was checked against cloned source on 2026-11-08, for four things only: the spine script's guard wiring (CNS `chains/evidence_spine.py`), the GEMS transport commit `5dbfeb7` and its accept path, observe-perceive's kernel pin, and the existence of sentinel_os's `ConservationGateway`. Not checked: an end-to-end run of the five-repo spine, GEMS's 20/20 experiment (it does not run against current main), whether sentinel_os's gateway is stricter than this connector, and downstream test suites.
+Cross-repo wiring was checked against cloned source on 2026-11-08. The CNS spine script ran end to end on that date, with 56 checks passing, no failures, and the three gaps the script records as stated facts. The run used each repo's current default branch, not the pins CI uses, so it shows the stack works together at those heads, not that the pinned stack does. Commits: CNS `fa40197`, HERALD `392dfd0`, TIE `3c93ef9`, Governance_Gateway `6342d7a`, CCC `8923a18`, Conservation_Kernel `c4719bc`. To reproduce, clone those five repos, put each one's package directory on `PYTHONPATH`, and run `python chains/evidence_spine.py` from the CNS checkout. Still not checked: GEMS's 20/20 experiment (it does not run against current main), sentinel_os's gateway strictness, and downstream suites.
 
 ## 2. How it works
 
