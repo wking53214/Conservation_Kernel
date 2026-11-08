@@ -42,7 +42,7 @@ unavoidable for anything downstream.
 
 ## What makes a gateway sound
 
-Three properties, all present in the reference implementation:
+Three properties a sound gateway needs. A 2026-11-08 read of GEMS' transport code confirmed the first two. The third needs qualifying, as noted below:
 
 1. **A transformer's output is an untrusted proposal, never an accepted
    artifact.** It becomes an artifact only after the kernel accepts it.

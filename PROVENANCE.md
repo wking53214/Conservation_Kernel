@@ -57,7 +57,7 @@ README's scope than the following documents support:
 - [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md), explicit out-of-scope list.
 - [`docs/GATEWAY.md`](docs/GATEWAY.md), the transport boundary is out of
   scope for the library; it now has a working reference implementation
-  elsewhere, tested against this kernel. That does not move bypass into
+  elsewhere. Its experiment result was measured against kernel `dbbb22b` and has not been reproduced against current main (see `GATEWAY.md`). That does not move bypass into
   scope here.
 
 Verified state as of 2026-08-27: `python3 -m pytest -q` → 47 passed; the code
