@@ -25,7 +25,7 @@ Wider pipeline: the kernel sits after the policy decision and before trusted dow
 
 The kernel asks one question: *did this transformation preserve protected epistemic and provenance distinctions, or did it silently change one of them?* It does not ask whether a claim is true, whether a request is permitted, or whether a human authorized it. It checks registered authorization events. It does not issue them.
 
-Cross-repo wiring (how the spine script builds the guards, and how `observe-perceive` and `sentinel_os` call this verifier) was read from other checkouts on 2026-10-31. It was not re-verified in this repo's sweep.
+Cross-repo wiring was checked against cloned source on 2026-11-08, for four things only: the spine script's guard wiring (CNS `chains/evidence_spine.py`), the GEMS transport commit `5dbfeb7` and its accept path, observe-perceive's kernel pin, and the existence of sentinel_os's `ConservationGateway`. Not checked: an end-to-end run of the five-repo spine, GEMS's 20/20 experiment (it does not run against current main), whether sentinel_os's gateway is stricter than this connector, and downstream test suites.
 
 ## 2. How it works
 
@@ -76,7 +76,7 @@ Known gaps:
 | Clock | Windows and revocations are only as good as the clock given to the kernel. A stale registry snapshot still honours a revoked grant. |
 | NL equivalence | Explicitly unverified. |
 | Vocabulary drift | The Gateway's epistemic enum differs from this one. Adapters must map. |
-| Consumer pins | As read 2026-10-31, observe-perceive pins commit `4e7c0d9`. No sentinel_os pin was found in its requirements files. Do not move the default branch without re-running those suites. |
+| Consumer pins | On 2026-11-08, observe-perceive's main pins commit `4e7c0d9`. sentinel_os has no kernel pin in its project or requirements files. Do not move the default branch without re-running those suites. |
 | Scale | Single-process verifier. No Raft, no multi-region. |
 
 ## 4. Which doors write, and what protects each
@@ -104,7 +104,7 @@ Measured 2026-11-08 on Python 3.13, at main `00b0031`, from the repo root. The c
 | Tag and release | None. The changelog has no 0.2.0 or 0.3.0 heading. Tagging is the owner's decision. |
 | Tests, no CNS | `python3 -m pytest -q`: 285 passed, 4 skipped (connector tests skip without CNS). |
 | Tests, with CNS | 440 passed, 0 skipped. The CNS pin is `v2.3.0`. |
-| CI on main | Green on `00b0031` (2026-11-08). Four jobs on Python 3.11 and 3.12: `test` runs the suite, the experiment and ruff with only the dev extra installed, so connector tests skip. `cns` installs the CNS extra and sets `CONSERVATION_KERNEL_REQUIRE_CNS=1`, so connector tests must run and a missing CNS fails the job. |
+| CI on main | Green on `75e1e32` (2026-11-08): four jobs on Python 3.11 and 3.12. `test` runs the suite, the experiment and ruff with only the dev extra installed, so connector tests skip. `cns` installs the CNS extra and sets `CONSERVATION_KERNEL_REQUIRE_CNS=1`, so connector tests must run and a missing CNS fails the job. The test counts in section 5 were measured at `00b0031`, not at this commit. |
 
 The suite must run from the repo root. `test_experiment.py` reads a relative path and fails from any other directory.
 
