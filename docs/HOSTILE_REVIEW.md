@@ -2,6 +2,8 @@
 
 This review is intentionally not a success narrative.
 
+Status note: the findings below are dated to the review that produced them, and some describe the v0.1 design. Several have since been fixed or narrowed. Current status is in `README.md` and `docs/LIMITATIONS.md`. Treat any finding here as historical unless one of those documents confirms it still stands.
+
 1. **Can a Gem bypass the kernel?** Yes. A caller can construct an artifact
    and never submit it. This is a library limitation and is `FALSIFIED` as a
    claim of universal enforcement. A gateway/protocol is required.

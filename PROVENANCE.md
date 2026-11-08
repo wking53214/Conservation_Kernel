@@ -63,6 +63,9 @@ README's scope than the following documents support:
 Verified state as of 2026-08-27: `python3 -m pytest -q` → 47 passed; the code
 has no runtime dependencies outside the standard library.
 
+Current state as of 2026-11-08 (main at `f46139d`): 285 passed, 4 skipped
+without CNS; 440 passed with CNS. The 2026-08-27 figure is kept as history.
+
 ## Adversarial audit history
 
 The hostile corpus in `src/conservation_kernel/experiments.py` and the
