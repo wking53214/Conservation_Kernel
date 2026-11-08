@@ -1,4 +1,4 @@
-"""Conservation Kernel v0.1.
+"""Conservation Kernel v0.3.0.
 
 This package verifies structural conservation claims across artifact
 transformations.  It does not determine whether a proposition is true in the

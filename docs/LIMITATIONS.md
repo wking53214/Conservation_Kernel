@@ -16,7 +16,7 @@ lets the transformer write human authorization events, the result is not an
 independent authorization protocol. The next phase would need separate
 custody, signed events, or a gateway with a defined threat model.
 
-Authorization windows, revocation and delegation (unreleased) are judged
+Authorization windows, revocation and delegation are judged
 against the clock the deployment hands the kernel, and against the registry
 the kernel is given. A wrong clock, or a registry copy that has not received a
 revocation, gives a wrong answer. Revocation takes effect from when the kernel

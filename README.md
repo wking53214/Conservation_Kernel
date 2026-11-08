@@ -96,7 +96,7 @@ Evidence is the first open door to get an optional caller permission, because th
 
 ## 5. Status and tests
 
-Measured 2026-11-08 on Python 3.13, at main `3aab1ae`, from the repo root:
+Measured 2026-11-08 on Python 3.13, at main `3aab1ae`, from the repo root. The only change since then (`f46139d`) is the README, so the code figures still hold:
 
 | What | State |
 |---|---|
@@ -104,7 +104,7 @@ Measured 2026-11-08 on Python 3.13, at main `3aab1ae`, from the repo root:
 | Tag and release | None. The changelog has no 0.2.0 or 0.3.0 heading. Tagging is the owner's decision. |
 | Tests, no CNS | `python3 -m pytest -q`: 285 passed, 4 skipped (connector tests skip without CNS). |
 | Tests, with CNS | 440 passed, 0 skipped. The CNS pin is `v2.3.0`. |
-| CI on main | Not re-measured here. Last recorded state was green. |
+| CI on main | Green at `f46139d` (2026-11-08): `test` and `cns` jobs on Python 3.11 and 3.12, the `cns` jobs requiring CNS rather than skipping. |
 
 The suite must run from the repo root. `test_experiment.py` reads a relative path and fails from any other directory.
 
@@ -121,7 +121,7 @@ from conservation_kernel import ConservationKernel, VerificationResult
 #   .accepted → PASS or PASS_WITH_DECLARED_TRANSFORMATION
 ```
 
-The public surface is `conservation_kernel.__all__`. Everything else is internal.
+The core public API is `conservation_kernel.__all__`. `conservation_kernel.cns_connector` is a separate, optional interface, documented in section 7. Everything else is internal.
 
 ## 7. Optional CNS connection
 
