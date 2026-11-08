@@ -14,14 +14,21 @@ hypothetical.
 
 ## Reference implementation
 
-`wking53214/GEMS`, directory `transport/` (landed in commit `5dbfeb7`).
+`wking53214/GEMS`, directory `transport/` (landed in commit `5dbfeb7`, confirmed 2026-11-08).
 `ConservationGateway` (`transport/gems_transport/transport.py`) wraps this
 kernel as the only accepted-artifact boundary; `Pipeline` only forwards
-artifacts the gateway accepted. It is unwired salvage there, has no unit
-tests, and is verified only by an experiment, but the experiment runs
-against the current kernel and is reproducible.
+artifacts the gateway accepted. It is unwired salvage there. Its directory has
+no unit tests (GEMS' test folder covers only the CNS connector and independence),
+and it is verified only by an experiment.
 
-Result against this kernel (`dbbb22b`):
+Result against kernel commit `dbbb22b`. This is historical, not current:
+
+On 2026-11-08 the experiment did not run against current main. The kernel now
+refuses to build without a root guard, and GEMS does not pass one. With those
+guards switched off in a scratch run, the GEMS root artifacts are refused,
+because a root FACT must cite evidence about its own proposition and the
+fixtures do not. The 20/20 result therefore describes the kernel at `dbbb22b`.
+It stays unreproduced until GEMS updates its fixtures and construction.
 
 | metric | value |
 | --- | --- |
