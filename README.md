@@ -96,7 +96,7 @@ Evidence is the first open door to get an optional caller permission, because th
 
 ## 5. Status and tests
 
-Measured 2026-11-08 on Python 3.13, at main `3aab1ae`, from the repo root. The only change since then (`f46139d`) is the README, so the code figures still hold:
+Measured 2026-11-08 on Python 3.13, at main `00b0031`, from the repo root. The code changed after an earlier measurement at `3aab1ae` (a version fix), so these counts are from the current commit:
 
 | What | State |
 |---|---|
@@ -104,7 +104,7 @@ Measured 2026-11-08 on Python 3.13, at main `3aab1ae`, from the repo root. The o
 | Tag and release | None. The changelog has no 0.2.0 or 0.3.0 heading. Tagging is the owner's decision. |
 | Tests, no CNS | `python3 -m pytest -q`: 285 passed, 4 skipped (connector tests skip without CNS). |
 | Tests, with CNS | 440 passed, 0 skipped. The CNS pin is `v2.3.0`. |
-| CI on main | Green at `f46139d` (2026-11-08): `test` and `cns` jobs on Python 3.11 and 3.12, the `cns` jobs requiring CNS rather than skipping. |
+| CI on main | Green on `00b0031` (2026-11-08). Four jobs on Python 3.11 and 3.12: `test` runs the suite, the experiment and ruff with only the dev extra installed, so connector tests skip. `cns` installs the CNS extra and sets `CONSERVATION_KERNEL_REQUIRE_CNS=1`, so connector tests must run and a missing CNS fails the job. |
 
 The suite must run from the repo root. `test_experiment.py` reads a relative path and fails from any other directory.
 
@@ -156,6 +156,6 @@ Limits of the connector:
 - A `DeclaredChange` with NaN or infinity is never turned into a `PASS`. The kernel rejects it, or the ledger refuses to commit its result.
 - `cns_chain(...).complete()` is `False` by design. The two gates judge different candidates, so run `CnsRootAdmissionGate` on its own, on a root artifact.
 
-CI installs only `.[dev]`, so the connected tests (which need the `cns` extra) are skipped there. Run them in an environment where the extra is installed.
+CI covers CNS in two jobs. The `test` job installs only `.[dev]`, so the connector tests skip there. The `cns` job installs the extra and requires CNS, so those tests run and cannot skip silently. To run them locally, install the extra first.
 
 Apache-2.0.
