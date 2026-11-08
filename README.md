@@ -100,7 +100,7 @@ Measured 2026-11-08 on Python 3.13, at main `3aab1ae`, from the repo root:
 
 | What | State |
 |---|---|
-| Version | 0.3.0 (`pyproject.toml`, `__version__`). `ConservationKernel.version` still reads 0.2.0 and is what snapshots record as `kernel_version`. The two are not yet reconciled. |
+| Version | 0.3.0 (`pyproject.toml`, `__version__`, and `ConservationKernel.version`, which snapshots record as `kernel_version`). |
 | Tag and release | None. The changelog has no 0.2.0 or 0.3.0 heading. Tagging is the owner's decision. |
 | Tests, no CNS | `python3 -m pytest -q`: 285 passed, 4 skipped (connector tests skip without CNS). |
 | Tests, with CNS | 440 passed, 0 skipped. The CNS pin is `v2.3.0`. |
