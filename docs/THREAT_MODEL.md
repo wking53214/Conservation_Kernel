@@ -28,4 +28,4 @@ registry, and an independent persistence/witness design.
 The gateway boundary specifically now has a working reference implementation
 outside this repo, see [`GATEWAY.md`](GATEWAY.md). It does not change what
 this kernel does or bring bypass into scope; it records what a sound choke
-point looks like and that one has been built and tested against this kernel.
+point looks like and that a reference choke point exists. `GATEWAY.md` says exactly what is and is not verified.

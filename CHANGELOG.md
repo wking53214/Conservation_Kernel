@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Snapshots are signed (`signing.py`), from version 0.3.0.
+
 - `ConservationLedger.record_rejection(result, record, output)` takes only a result the verifier produced for that
   record and output, the way `commit` does, and a ledger a kernel owns only one reached against its registry. It took
   any `VerificationResult`, so a hand-written `PASS` could sit in the history beside the real verdicts (nothing decides
