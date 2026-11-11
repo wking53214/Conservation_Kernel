@@ -21,11 +21,15 @@ HERALD ──signed export──> TIE ──evidence──> Conservation_Kernel 
 - **Governance_Gateway** judges the artifact at its admission door.
 - **CCC** judges the attempt to ingest into its store.
 
-Wider pipeline: the kernel sits after the policy decision and before trusted downstream use or execution (`Admission → Observe/Keys → Locks → PERCEIVE → Decision → Conservation → Execution → Custody`).
+Wider pipeline (described by sentinel_os; an order, not an import chain): the kernel sits after the policy decision and before trusted downstream use or execution (`Admission → Observe/Keys → Locks → PERCEIVE → Decision → Conservation → Execution → Custody`).
 
 The kernel asks one question: *did this transformation preserve protected epistemic and provenance distinctions, or did it silently change one of them?* It does not ask whether a claim is true, whether a request is permitted, or whether a human authorized it. It checks registered authorization events. It does not issue them.
 
 Cross-repo wiring was checked against cloned source on 2026-11-08. The CNS spine script ran end to end on that date, with 56 checks passing, no failures, and the three gaps the script records as stated facts. The run used each repo's current default branch, not the pins CI uses, so it shows the stack works together at those heads, not that the pinned stack does. Commits: CNS `fa40197`, HERALD `392dfd0`, TIE `3c93ef9`, Governance_Gateway `6342d7a`, CCC `8923a18`, Conservation_Kernel `c4719bc`. To reproduce, clone those five repos, put each one's package directory on `PYTHONPATH`, and run `python chains/evidence_spine.py` from the CNS checkout. Still not checked: GEMS's 20/20 experiment (it does not run against current main), sentinel_os's gateway strictness, and downstream suites.
+
+## Where this fits
+
+The kernel is shared infrastructure inside ≡TACK, the whole library of repos (it is not STACK-kernel, which is one separate repo). Other repos depend on it by pinned commit: observe-perceive, sentinel_os and GEMS. CNS, the cross-cutting layer, connects to it through an optional two-way link (section 7). In this README, "spine" means the five-repo evidence chain above.
 
 ## 2. How it works
 
@@ -76,7 +80,7 @@ Known gaps:
 | Clock | Windows and revocations are only as good as the clock given to the kernel. A stale registry snapshot still honours a revoked grant. |
 | NL equivalence | Explicitly unverified. |
 | Vocabulary drift | The Gateway's epistemic enum differs from this one. Adapters must map. |
-| Consumer pins | On 2026-11-08, observe-perceive's main pins commit `4e7c0d9`. sentinel_os has no kernel pin in its project or requirements files. Do not move the default branch without re-running those suites. |
+| Consumer pins | On 2026-11-08, observe-perceive's main pins commit `4e7c0d9`. sentinel_os pins commit `7b08c79` in `sentinel_os/sentinel_os/requirements.txt` (not in its top-level files); GEMS CI pins `570c2c7`. Do not move the default branch without re-running those suites. |
 | Scale | Single-process verifier. No Raft, no multi-region. |
 
 ## 4. Which doors write, and what protects each
@@ -104,13 +108,15 @@ Measured 2026-11-08 on Python 3.13, at main `00b0031`, from the repo root. The c
 | Tag and release | None. The changelog has no 0.2.0 or 0.3.0 heading. Tagging is the owner's decision. |
 | Tests, no CNS | `python3 -m pytest -q`: 285 passed, 4 skipped (connector tests skip without CNS). |
 | Tests, with CNS | 440 passed, 0 skipped. The CNS pin is `v2.3.0`. |
-| CI on main | Green on `4f7016f` (2026-11-08): four jobs on Python 3.11 and 3.12. `test` runs the suite, the experiment and ruff with only the dev extra installed, so connector tests skip. `cns` installs the CNS extra and sets `CONSERVATION_KERNEL_REQUIRE_CNS=1`, so connector tests must run and a missing CNS fails the job. The test counts in section 5 were measured at `00b0031`, not at this commit. |
+| CI on main | Green on `a03f237` (2026-11-10): four jobs on Python 3.11 and 3.12. `test` runs the suite, the experiment and ruff with only the dev extra installed, so connector tests skip. `cns` installs the CNS extra and sets `CONSERVATION_KERNEL_REQUIRE_CNS=1`, so connector tests must run and a missing CNS fails the job. The test counts in section 5 were measured at `00b0031` and re-confirmed at `a03f237`. |
 
 The suite must run from the repo root. `test_experiment.py` reads a relative path and fails from any other directory.
 
 The experiment (`PYTHONPATH=src python3 experiments/run_experiment.py`) is a simulated control and treatment. It is **not** a population claim about LLMs.
 
 ## 6. Interface
+
+This block lists the result's fields. It is a shape reference, not a runnable script. For a runnable example, use the experiment in section 5.
 
 ```python
 from conservation_kernel import ConservationKernel, VerificationResult

@@ -40,7 +40,7 @@ manager.
 | 2026-11-07 | PR #42 refuses evidence about another subject when it is attached (attack #10 closed in code). PR #43 applies the same rule to new propositions. |
 | 2026-11-08 | PR #44 README trimmed to the spine position; PR #45 audit reconciliation; PR #46 kernel version set to 0.3.0 to match the package. |
 | 2026-11-08 | PR #47 verification currency; PR #48 GEMS 20/20 result labeled historical; PR #49 integration statements corrected; PR #50 invariants and hostile-review status. |
-| current | main at `4f7016f` (PR #51, documentation currency). CI green on that commit. Test counts (285 passed and 4 skipped without CNS; 440 passed with CNS) were measured at `00b0031`. |
+| current | main at `a03f237` (PR #53, end-to-end spine run; PRs #52 and #53 followed #51). CI green on that commit. Test counts (285 passed and 4 skipped without CNS; 440 passed with CNS) were measured at `00b0031`. |
 
 ## What is real vs. aspirational
 

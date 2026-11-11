@@ -18,7 +18,7 @@ hypothetical.
 `ConservationGateway` (`transport/gems_transport/transport.py`) wraps this
 kernel as the only accepted-artifact boundary; `Pipeline` only forwards
 artifacts the gateway accepted. It is unwired salvage there. Its directory has
-no unit tests (GEMS' test folder covers only the CNS connector and independence),
+no unit tests (GEMS' tests import the transport package only for the CNS connector, CNS independence and TIE adapter checks; none was confirmed to exercise the gateway itself),
 and it is verified only by an experiment.
 
 Result against kernel commit `dbbb22b`. This is historical, not current:
