@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 PACKAGE = SRC / "conservation_kernel"
 
-CNS_TAG = "v3.0.0"
+CNS_TAG = "v4.0.0"
 
 BLOCK = "import sys; sys.modules['cns'] = None; sys.modules['cns.gate'] = None\n"
 
