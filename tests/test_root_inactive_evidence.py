@@ -82,7 +82,7 @@ def test_restoring_a_snapshot_never_applies_it_so_withdrawn_evidence_cannot_bric
     snapshot = kernel.snapshot()
     snapshot["registry"]["evidence"][0]["active"] = False  # the evidence is withdrawn afterwards
     snapshot["snapshot_digest"] = _digest(canonical_json({k: v for k, v in snapshot.items() if k != "snapshot_digest"}))
-    restored = ConservationKernel.from_snapshot(snapshot, allow_unguarded_roots=True, allow_unguarded_evidence=True,
+    restored = ConservationKernel.from_snapshot(snapshot, allow_unguarded_restore=True, allow_unguarded_roots=True, allow_unguarded_evidence=True,
                                                 refuse_inactive_root_evidence=True)
     assert restored.refuse_inactive_root_evidence is True
     assert restored.ledger.artifact("root:doc-1") is not None

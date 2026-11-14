@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Breaking:** authorizing and restoring now refuse unless the deployer says something or opts out out loud, the
+  pattern `allow_unguarded_roots` and `allow_unguarded_evidence` already use. (1) A registry with no `trusted_humans`
+  refuses `add_authorization` and `add_delegation` (`InvalidEvent`) unless built with `allow_untrusted_humans=True`;
+  `ConservationKernel` and `from_snapshot` take the flag. (2) `ConservationLedger.restore` and
+  `ConservationKernel.from_snapshot` refuse a snapshot holding roots (`UnguardedKernelError`) when no root guard is
+  configured, unless `allow_unguarded_restore=True`. The guard is not run on restored roots, only required to exist.
+  Both default to `False`. The `has_root_guard` docstring now says plainly that code in the same process can still
+  reach private attributes.
+
 - Snapshots are signed (`signing.py`), from version 0.3.0.
 
 - `ConservationLedger.record_rejection(result, record, output)` takes only a result the verifier produced for that

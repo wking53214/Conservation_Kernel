@@ -78,4 +78,4 @@ def test_a_snapshot_holding_such_a_root_does_not_restore():
     snapshot["registry"]["evidence"][0]["subject_id"] = "p0"  # a ledger written by hand: the evidence is about another
     snapshot["snapshot_digest"] = _digest(canonical_json({k: v for k, v in snapshot.items() if k != "snapshot_digest"}))
     with pytest.raises(SnapshotIntegrityError, match="about this proposition"):
-        ConservationKernel.from_snapshot(snapshot, allow_unguarded_roots=True, allow_unguarded_evidence=True)
+        ConservationKernel.from_snapshot(snapshot, allow_unguarded_restore=True, allow_unguarded_roots=True, allow_unguarded_evidence=True)

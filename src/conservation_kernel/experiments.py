@@ -52,7 +52,7 @@ def _authorization(registry: EvidenceRegistry, authorization_id: str, subject_id
 
 def build_ground_truth() -> tuple[Artifact, EvidenceRegistry]:
     """Build the deliberately mixed canonical hostile test artifact."""
-    registry = EvidenceRegistry()
+    registry = EvidenceRegistry(allow_untrusted_humans=True)  # fixture: its actors are labels, not identities
     _evidence(registry, "ev-human-fact", "p-human-fact", EvidenceKind.SOURCE_OBSERVATION)
     _evidence(registry, "ev-human-assumption", "p-human-assumption", EvidenceKind.SOURCE_OBSERVATION)
     _evidence(registry, "ev-human-decision", "p-human-decision", EvidenceKind.SOURCE_OBSERVATION)

@@ -50,6 +50,7 @@ class ConservationKernel:
         refuse_inactive_root_evidence: bool = False,
         require_content_bound: bool = False,
         allow_unguarded_evidence: bool = False,
+        allow_untrusted_humans: bool = False,
     ) -> None:
         """`clock` returns the time the kernel decides at (ISO 8601 with offset). Every decision and root admission
         is stamped with it and judged as of it. It defaults to this machine's UTC clock; a deployment should hand in
@@ -72,6 +73,11 @@ class ConservationKernel:
         `allow_unguarded_roots`, the flag is greppable on purpose. To guard a registry you pass in, build it with
         `EvidenceRegistry(evidence_guard=...)`.
 
+        `allow_untrusted_humans` is the same kind of explicit opt-out for authorizations. A registry with no
+        `trusted_humans` cannot tell a human from an actor that labels itself one, so it refuses every authorization
+        and delegation unless this is True. It applies to the registry this kernel builds; to set it on a registry you
+        pass in, build it with `EvidenceRegistry(allow_untrusted_humans=True)` (or give it `trusted_humans`).
+
         `require_content_bound` makes the registry refuse an authorization that does not carry the digest of the
         proposition it approves (`AuthorizationEvent.subject_digest`), so no authorization can be reused for other
         words than the ones approved. Off by default: an authorization with a digest is always held to it, and one
@@ -89,8 +95,11 @@ class ConservationKernel:
         self.refuse_inactive_root_evidence = bool(refuse_inactive_root_evidence)
         if require_content_bound and registry is not None:
             raise ValueError("pass require_content_bound to the registry you supply, not to the kernel as well")
+        if allow_untrusted_humans and registry is not None:
+            raise ValueError("pass allow_untrusted_humans to the registry you supply, not to the kernel as well")
         self._registry = registry or EvidenceRegistry(evidence_guard=evidence_guard,
-                                                      require_content_bound=require_content_bound)
+                                                      require_content_bound=require_content_bound,
+                                                      allow_untrusted_humans=allow_untrusted_humans)
         self.clock = clock or utc_now
         self.verifier = verifier or IndependentVerifier()
         self._ledger = ledger or ConservationLedger(root_guard=root_guard)
@@ -123,8 +132,10 @@ class ConservationKernel:
     def has_root_guard(self) -> bool:
         """Whether this kernel registers a root only with a guard's permission. A caller deciding whether to
         trust this kernel with an approval can read this; it cannot be turned off through the kernel's public
-        interface after construction (the ledger is read-only). Code willing to write a private name can still
-        reach it: that is a limit of in-process checks, not something the kernel can prevent."""
+        interface after construction (the ledger is read-only). Code running in the same process can still reach
+        private attributes and replace the guard: the guards protect against callers outside the process or behind
+        the public interface, not against code that shares it. That is a documented limit of in-process checks, not
+        something the kernel can prevent."""
         return self.ledger.has_root_guard
 
     @property
@@ -297,7 +308,9 @@ class ConservationKernel:
                       evidence_guard: Callable[[EvidenceRecord], bool] | None = None,
                       refuse_inactive_root_evidence: bool = False,
                       require_content_bound: bool = False,
-                      allow_unguarded_evidence: bool = False) -> "ConservationKernel":
+                      allow_unguarded_evidence: bool = False,
+                      allow_untrusted_humans: bool = False,
+                      allow_unguarded_restore: bool = False) -> "ConservationKernel":
         """A kernel continuing from `snapshot()`.
 
         The digest is checked first (corruption). Then, with `reverify`, every
@@ -307,6 +320,12 @@ class ConservationKernel:
         not do is authenticate the file: a snapshot that re-verifies is one
         the constitution would have accepted, not one this kernel is known to
         have produced. That needs a signature the deployer holds.
+
+        A snapshot that holds roots is refused (`UnguardedKernelError`) unless a `root_guard` is passed or
+        `allow_unguarded_restore=True` says restoring without one is deliberate. The guard is only required to be
+        configured: it is not run on the restored roots (a one-use permission would be spent), so `reverify` and the
+        signature, not the guard, are what vouch for them. Likewise the registry refuses authorizations and
+        delegations unless `trusted_humans` is given or `allow_untrusted_humans=True`.
         """
         body = dict(snapshot)
         signature = body.pop("signature", None)
@@ -323,8 +342,10 @@ class ConservationKernel:
                 raise SnapshotAuthenticityError(f"snapshot not authenticated: {problem}")
         registry = EvidenceRegistry.restore(body.get("registry", {}), trusted_humans=trusted_humans,
                                             require_bounded=require_bounded, evidence_guard=evidence_guard,
-                                            require_content_bound=require_content_bound)
-        ledger = ConservationLedger.restore(body.get("ledger", {}), root_guard=root_guard)
+                                            require_content_bound=require_content_bound,
+                                            allow_untrusted_humans=allow_untrusted_humans)
+        ledger = ConservationLedger.restore(body.get("ledger", {}), root_guard=root_guard,
+                                            allow_unguarded_restore=allow_unguarded_restore)
         kernel = cls(registry=registry, ledger=ledger, allow_unguarded_roots=allow_unguarded_roots, clock=clock,
                      refuse_inactive_root_evidence=refuse_inactive_root_evidence,
                      allow_unguarded_evidence=allow_unguarded_evidence)

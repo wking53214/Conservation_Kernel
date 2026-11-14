@@ -39,7 +39,7 @@ def authorization(auth_id="auth-1", digest=None, text=SMALL):
 
 
 def kernel(**options):
-    return ConservationKernel(root_guard=lambda artifact: True, **options, allow_unguarded_evidence=True)
+    return ConservationKernel(root_guard=lambda artifact: True, allow_untrusted_humans=True, **options, allow_unguarded_evidence=True)
 
 
 def root(text, artifact_id):
@@ -138,7 +138,7 @@ def test_the_digest_covers_the_claim_and_not_the_status_an_authorization_is_abou
 
 def test_a_bound_authorization_is_used_only_by_a_caller_that_names_the_content():
     """Fail closed: a path that does not say what it is authorizing cannot use an authorization that is about content."""
-    registry = EvidenceRegistry()
+    registry = EvidenceRegistry(allow_untrusted_humans=True)
     registry.add_authorization(authorization(digest=True))
     ask = dict(subject_id="p-1", transition_kind=TransitionKind.AUTHORITY_ESCALATION, from_value="NONE",
                to_value="HUMAN_AUTHORIZED")
@@ -178,7 +178,7 @@ def test_the_digest_survives_a_snapshot_and_an_unbound_authorization_keeps_its_o
     stored = {item["authorization_id"]: item for item in k.snapshot()["registry"]["authorizations"]}
     assert stored["auth-bound"]["subject_digest"] == prop(SMALL).canonical_digest
     assert "subject_digest" not in stored["auth-plain"]
-    restored = ConservationKernel.from_snapshot(k.snapshot(), root_guard=lambda artifact: True, allow_unguarded_evidence=True)
+    restored = ConservationKernel.from_snapshot(k.snapshot(), allow_untrusted_humans=True, root_guard=lambda artifact: True, allow_unguarded_evidence=True)
     assert restored.registry.authorization("auth-bound").subject_digest == prop(SMALL).canonical_digest
     assert restored.registry.authorization("auth-plain").subject_digest is None
     assert restored.snapshot() == k.snapshot()
@@ -188,7 +188,7 @@ def test_a_restore_that_requires_content_binding_refuses_an_unbound_authorizatio
     k = kernel()
     k.registry.add_authorization(authorization("auth-plain"))
     with pytest.raises(InvalidEvent, match="subject_digest"):
-        ConservationKernel.from_snapshot(k.snapshot(), root_guard=lambda artifact: True, require_content_bound=True, allow_unguarded_evidence=True)
+        ConservationKernel.from_snapshot(k.snapshot(), allow_untrusted_humans=True, root_guard=lambda artifact: True, require_content_bound=True, allow_unguarded_evidence=True)
 
 
 def test_an_empty_digest_is_not_a_digest():

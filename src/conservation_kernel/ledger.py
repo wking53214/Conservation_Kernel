@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from .errors import LedgerError, RootAdmissionError
+from .errors import LedgerError, RootAdmissionError, UnguardedKernelError
 from .events import TransformationRecord
 from .model import Artifact
 from .result import VerificationResult, _proof_issuer
@@ -198,17 +198,30 @@ class ConservationLedger:
         }
 
     @classmethod
-    def restore(cls, snapshot: dict, *, root_guard: Callable[[Artifact], bool] | None = None) -> "ConservationLedger":
+    def restore(cls, snapshot: dict, *, root_guard: Callable[[Artifact], bool] | None = None,
+                allow_unguarded_restore: bool = False) -> "ConservationLedger":
         """A ledger rebuilt from `snapshot()`. Every artifact's digests are
         recomputed and compared on the way in (Artifact.from_dict), so a
         snapshot whose bytes were altered is refused; whether the lineage in
         it was ever verified is the kernel's question, see
         ConservationKernel.from_snapshot. The roots in the snapshot are not put to
-        `root_guard` (they were guarded, or not, when first registered); it guards roots added after."""
+        `root_guard` (they were guarded, or not, when first registered); it guards roots added after.
+
+        What a restore does and does not check: it recomputes every digest, and it refuses a snapshot that holds
+        roots when no `root_guard` is configured, raising `UnguardedKernelError`, unless `allow_unguarded_restore=True`
+        says that is deliberate. It does not run the guard on the restored roots (a one-use permission would be spent
+        and the roots were decided when first registered), so a configured guard is a precondition, not a
+        re-authorization. Whether the roots and lineage hold up is `ConservationKernel.reverify`'s question."""
         ledger = cls(root_guard=root_guard)
         for item in snapshot.get("artifacts", []):
             artifact = Artifact.from_dict(item)
             ledger._add_artifact(artifact)
+        if (not ledger.has_root_guard and not allow_unguarded_restore
+                and any(not item.parent_artifact_ids for item in ledger._artifacts.values())):
+            raise UnguardedKernelError(
+                "refusing to restore a snapshot that contains roots into a ledger with no root_guard: the roots would "
+                "be taken on trust. Pass root_guard=..., or allow_unguarded_restore=True if that is deliberate."
+            )
         for item in snapshot.get("transformations", []):
             record = TransformationRecord.from_dict(item)
             if record.output_artifact_id not in ledger._artifacts:

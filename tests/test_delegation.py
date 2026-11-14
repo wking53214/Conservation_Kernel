@@ -153,7 +153,7 @@ def test_a_lineage_accepted_under_a_delegation_still_reloads_after_the_delegatio
     k.revoke(RevocationEvent(revocation_id="rev-d", authorization_id="del-1", revoked_by=Actor.human("lead"),
                              reason="role ended"))
     k.save(tmp_path / "kernel.json")
-    restored = ConservationKernel.load(tmp_path / "kernel.json", allow_unguarded_roots=True, trusted_humans={"lead", "researcher"},
+    restored = ConservationKernel.load(tmp_path / "kernel.json", allow_unguarded_restore=True, allow_unguarded_roots=True, trusted_humans={"lead", "researcher"},
                                        clock=_Clock(T3), allow_unguarded_evidence=True)
     assert restored.reconstruct(output.artifact_id).transformation_ids_in_order == ("tx-adopt",)
     assert restored.registry.at(T3).authorization("auth-adopt") is None
