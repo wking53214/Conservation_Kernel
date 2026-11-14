@@ -77,7 +77,7 @@ def test_a_snapshot_still_restores_with_a_guard_in_place():
     """Restoring rebuilds a ledger that was already registered; it does not ask for permission again."""
     source = ConservationKernel(allow_unguarded_roots=True, allow_unguarded_evidence=True)
     source.register_root(root())
-    restored = ConservationLedger.restore(source.ledger.snapshot())
+    restored = ConservationLedger.restore(source.ledger.snapshot(), allow_unguarded_restore=True)
     assert [a.artifact_id for a in restored.artifacts()] == ["root-1"]
 
 

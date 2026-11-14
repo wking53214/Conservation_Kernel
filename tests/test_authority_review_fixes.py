@@ -60,7 +60,7 @@ def test_reusing_a_transformation_id_later_does_not_move_its_decision_time(tmp_p
         k.submit(base, noop, replay)                       # verified and accepted; the ledger refuses the reused id
     assert k.ledger.verified_at("tx-adopt") == INSIDE
     k.save(tmp_path / "kernel.json")
-    restored = ConservationKernel.load(tmp_path / "kernel.json", allow_unguarded_roots=True, clock=_Clock(LATER), allow_unguarded_evidence=True)
+    restored = ConservationKernel.load(tmp_path / "kernel.json", allow_unguarded_restore=True, allow_untrusted_humans=True, allow_unguarded_roots=True, clock=_Clock(LATER), allow_unguarded_evidence=True)
     assert restored.ledger.verified_at("tx-adopt") == INSIDE
 
 # ---------------------------------------------------------------- 2. unstamped history is stamped once, on first reload
@@ -77,14 +77,14 @@ def test_history_from_before_stamps_is_stamped_on_first_reload_so_a_later_revoca
     old = tmp_path / "old.json"
     old.write_text(json.dumps(body))
 
-    first = ConservationKernel.load(old, allow_unguarded_roots=True, clock=_Clock(AFTER), allow_unguarded_evidence=True)
+    first = ConservationKernel.load(old, allow_unguarded_restore=True, allow_untrusted_humans=True, allow_unguarded_roots=True, clock=_Clock(AFTER), allow_unguarded_evidence=True)
     assert first.ledger.verified_at("tx-adopt") == AFTER          # judged and stamped as of this reload
     later = _Clock(LATER)
     first.clock = later
     first.revoke(RevocationEvent(revocation_id="rev-1", authorization_id="auth-adopt",
                                  revoked_by=Actor.human("adopter"), reason="no longer adopted"))
     first.save(tmp_path / "after.json")
-    again = ConservationKernel.load(tmp_path / "after.json", allow_unguarded_roots=True, clock=_Clock(LATER), allow_unguarded_evidence=True)
+    again = ConservationKernel.load(tmp_path / "after.json", allow_unguarded_restore=True, allow_untrusted_humans=True, allow_unguarded_roots=True, clock=_Clock(LATER), allow_unguarded_evidence=True)
     assert again.reconstruct("artifact-ground-truth-adopted").transformation_ids_in_order == ("tx-adopt",)
 
 # ---------------------------------------------------------------- 3. delegated power reaches only named subjects
@@ -152,4 +152,4 @@ def test_a_snapshot_stamped_in_the_future_is_refused(tmp_path):
     k, *_ = _adopted_kernel(_Clock(LATER))
     k.save(tmp_path / "kernel.json")
     with pytest.raises(SnapshotIntegrityError, match="future"):
-        ConservationKernel.load(tmp_path / "kernel.json", allow_unguarded_roots=True, clock=_Clock(INSIDE), allow_unguarded_evidence=True)
+        ConservationKernel.load(tmp_path / "kernel.json", allow_unguarded_restore=True, allow_untrusted_humans=True, allow_unguarded_roots=True, clock=_Clock(INSIDE), allow_unguarded_evidence=True)

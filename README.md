@@ -90,11 +90,11 @@ Known gaps:
 | `register_root`, `ledger.add_initial` | A root guard must answer exactly `True`. On a ledger the kernel owns, the kernel's `admit_root` also runs. A kernel refuses to be built without a root guard unless `allow_unguarded_roots=True`. |
 | `ledger.commit` | Takes only a result the verifier produced for this record and output (its proof). A hand-written or edited result is refused. |
 | `ConservationKernel.submit` | The verifier decides. Any caller may submit. An input sharing an id with a ledger artifact must be that artifact. |
-| `registry.add_authorization`, `add_delegation`, `revoke` | Only from a human in `trusted_humans`, when the deployer sets it. If unset, any actor id is accepted. An authorization with a `subject_digest` counts only for that proposition. |
+| `registry.add_authorization`, `add_delegation`, `revoke` | `add_authorization` and `add_delegation` accept only a human in `trusted_humans`; `revoke` checks it when the deployer sets it. With `trusted_humans` unset, authorizations and delegations are refused (`InvalidEvent`) unless `allow_untrusted_humans=True` says that any actor labelled human is acceptable. An authorization with a `subject_digest` counts only for that proposition. |
 | `registry.add_evidence` | With an `evidence_guard`, a record is added only if the guard answers exactly `True`. Snapshot-restored evidence goes through the guard too. A kernel refuses to be built without one unless `allow_unguarded_evidence=True`. A bare `EvidenceRegistry` takes any caller's evidence. |
 | `ledger.record_rejection` | Takes only a verifier result whose proof checks, for the record and output given. |
 | Times on roots and transformations | Set by the kernel's clock. There is no public door to stamp a time. |
-| `from_snapshot`, `load` | Digest check and re-verification. A signature is checked only if the loader passes a signer. |
+| `from_snapshot`, `load` | Digest check and re-verification. A signature is checked only if the loader passes a signer. A snapshot that holds roots is refused unless a root guard is configured or `allow_unguarded_restore=True`; the guard is not run on the restored roots, only required to exist. The registry rules above apply on restore too. |
 
 Evidence is the first open door to get an optional caller permission, because the verifier trusts evidence to approve strong claims. Whether `submit` should get one too is an open decision for the owner. The CNS evidence spine does pass an evidence guard (TIE's `tie_evidence_guard`, built in the spine script). Whether that guard is independently trustworthy is a deployment question this repo does not prove.
 

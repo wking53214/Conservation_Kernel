@@ -68,7 +68,7 @@ def test_a_root_fact_with_only_a_source_is_refused_but_an_observation_with_only_
 
 
 def test_a_root_authority_claim_needs_an_authorization_about_that_proposition():
-    registry = EvidenceRegistry()
+    registry = EvidenceRegistry(allow_untrusted_humans=True)
     registry.add_authorization(_human_auth("auth-other", "p-other", TransitionKind.AUTHORITY_ESCALATION, "NONE", "HUMAN_AUTHORIZED"))
     k = ConservationKernel(allow_unguarded_roots=True, registry=registry, allow_unguarded_evidence=True)
     p = Proposition("p-claim", "Deploy to production.", EpistemicStatus.DECISION, OriginStatus.MACHINE_ORIGINATED,
@@ -137,7 +137,7 @@ def _derive(root, new_props, extra_declared=()):
 
 
 def test_a_new_proposition_cannot_be_born_canonical_on_an_unrelated_authorization():
-    registry = EvidenceRegistry()
+    registry = EvidenceRegistry(allow_untrusted_humans=True)
     registry.add_authorization(_human_auth("auth-unrelated", "p-elsewhere", TransitionKind.EPISTEMIC_PROMOTION, "UNKNOWN", "FACT"))
     k, root, p_in = _base(registry)
     born = Proposition("p-born-canonical", "It is so.", EpistemicStatus.INFERENCE, OriginStatus.MACHINE_ORIGINATED,
@@ -151,7 +151,7 @@ def test_a_new_proposition_cannot_be_born_canonical_on_an_unrelated_authorizatio
 
 
 def test_a_new_proposition_is_born_authoritative_only_with_an_authorization_about_it():
-    registry = EvidenceRegistry()
+    registry = EvidenceRegistry(allow_untrusted_humans=True)
     registry.add_authorization(_human_auth("auth-born", "p-born", TransitionKind.AUTHORITY_ESCALATION, "NONE", "HUMAN_AUTHORIZED"))
     k, root, p_in = _base(registry)
     born = Proposition("p-born", "Approved by the reviewer.", EpistemicStatus.DECISION, OriginStatus.MACHINE_ORIGINATED,

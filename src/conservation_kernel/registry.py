@@ -24,8 +24,15 @@ class EvidenceRegistry:
     def __init__(self, *, trusted_humans: set[str] | frozenset[str] | None = None,
                  require_bounded: bool = False,
                  evidence_guard: Callable[[EvidenceRecord], bool] | None = None,
-                 require_content_bound: bool = False) -> None:
-        """`evidence_guard`, if given, is asked before any evidence record is added, and the record is added only if it
+                 require_content_bound: bool = False,
+                 allow_untrusted_humans: bool = False) -> None:
+        """`trusted_humans` names the actor ids whose authorizations and delegations this registry accepts. With none
+        given, the registry refuses every authorization and delegation (`InvalidEvent`), because it cannot know who is
+        human: `Actor.kind == HUMAN` is a self-declaration. Passing `allow_untrusted_humans=True` says that is
+        deliberate and restores the old behaviour (any actor labelled human is accepted). The flag is greppable on
+        purpose, like `allow_unguarded_roots`. It changes nothing when `trusted_humans` is given.
+
+        `evidence_guard`, if given, is asked before any evidence record is added, and the record is added only if it
         answers exactly True. It is the caller's own permission check (the kernel imports nothing to supply one); a
         guard that raises or answers anything else refuses, and a refused record leaves the registry as it was. It is
         asked after the registry has refused what it refuses itself (a duplicate id), so a one-use permission is not
@@ -37,9 +44,13 @@ class EvidenceRegistry:
         # human authorizations (measured 2026-09-08). The kernel cannot know
         # who is human; the deployer can. When `trusted_humans` is given, an
         # authorization is accepted only from an actor id in that set. When
-        # it is None the registry behaves as before, and that fact is the
-        # trust assumption every downstream "human authorized" claim rests on.
+        # it is None, authorizations and delegations are refused unless
+        # `allow_untrusted_humans` says that is deliberate, and with it the
+        # registry accepts any actor labelled human: the trust assumption
+        # every downstream "human authorized" claim then rests on.
         self.trusted_humans = frozenset(trusted_humans) if trusted_humans is not None else None
+        # Refuse-unless-opted-out: with no trusted_humans, authorizations and delegations are refused unless this is set.
+        self.allow_untrusted_humans = bool(allow_untrusted_humans)
         # Off by default, so nothing changes until a deployer asks: with it on, an authorization must say when it
         # stops holding (`valid_until`). An open-ended one is refused, live and on restore.
         self.require_bounded = require_bounded
@@ -56,6 +67,10 @@ class EvidenceRegistry:
         # revocation id -> (the revocation, when the registry recorded it). Recorded time is the deployer's clock,
         # handed in by whoever records it (ConservationKernel.revoke passes its own), never the revoker's claim.
         self._revocations: dict[str, tuple[RevocationEvent, str]] = {}
+
+    _NO_TRUSTED_HUMANS = ("{what} refused: this registry has no trusted_humans, so it cannot tell a human from an actor "
+                          "that labels itself one. Build it with trusted_humans=..., or allow_untrusted_humans=True if "
+                          "accepting any actor labelled human is deliberate.")
 
     @property
     def evidence_guard(self) -> Callable[[EvidenceRecord], bool] | None:
@@ -95,6 +110,8 @@ class EvidenceRegistry:
             if delegation.delegate_id != event.authorized_by.actor_id:
                 raise InvalidEvent(f"authorization {event.authorization_id} is by {event.authorized_by.actor_id!r}, but "
                                    f"delegation {delegation.delegation_id} is delegated to {delegation.delegate_id!r}")
+        elif self.trusted_humans is None and not self.allow_untrusted_humans:
+            raise InvalidEvent(self._NO_TRUSTED_HUMANS.format(what=f"authorization {event.authorization_id}"))
         elif self.trusted_humans is not None and event.authorized_by.actor_id not in self.trusted_humans:
             raise InvalidEvent(
                 f"authorization {event.authorization_id} is by {event.authorized_by.actor_id!r}, "
@@ -130,6 +147,8 @@ class EvidenceRegistry:
         if event.delegation_id in self._delegations or event.delegation_id in self._authorizations:
             raise InvalidEvent(f"duplicate delegation ID {event.delegation_id}")
         if event.parent_delegation_id is None:
+            if self.trusted_humans is None and not self.allow_untrusted_humans:
+                raise InvalidEvent(self._NO_TRUSTED_HUMANS.format(what=f"delegation {event.delegation_id}"))
             if self.trusted_humans is not None and event.delegator.actor_id not in self.trusted_humans:
                 raise InvalidEvent(
                     f"delegation {event.delegation_id} is by {event.delegator.actor_id!r}, "
@@ -321,14 +340,15 @@ class EvidenceRegistry:
     @classmethod
     def restore(cls, snapshot: dict, *, trusted_humans=None, require_bounded: bool = False,
                 evidence_guard: Callable[[EvidenceRecord], bool] | None = None,
-                require_content_bound: bool = False) -> "EvidenceRegistry":
-        """A registry rebuilt from `snapshot()`. Authorizations go through
-        add_authorization, so a trusted-humans binding and `require_bounded`
-        are enforced on restore as they were live. So is `evidence_guard`: it is in place before the first record is
+                require_content_bound: bool = False, allow_untrusted_humans: bool = False) -> "EvidenceRegistry":
+        """A registry rebuilt from `snapshot()`. Authorizations and delegations go through
+        add_authorization / add_delegation, so a trusted-humans binding (or the explicit
+        `allow_untrusted_humans=True` opt-out) and `require_bounded` are enforced on restore as they were live. So is `evidence_guard`: it is in place before the first record is
         added, and a record it does not authorize refuses the whole restore, so a file cannot plant evidence the
         guard would have refused."""
         registry = cls(trusted_humans=trusted_humans, require_bounded=require_bounded,
-                       evidence_guard=evidence_guard, require_content_bound=require_content_bound)
+                       evidence_guard=evidence_guard, require_content_bound=require_content_bound,
+                       allow_untrusted_humans=allow_untrusted_humans)
         for item in snapshot.get("evidence", []):
             registry.add_evidence(EvidenceRecord.from_dict(item))
         for item in snapshot.get("delegations", []):             # before the authorizations that cite them

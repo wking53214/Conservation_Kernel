@@ -56,7 +56,7 @@ def test_a_decision_made_before_the_revocation_still_reloads_after_it(tmp_path):
     clock.now = T2
     k.revoke(_revoke())
     k.save(tmp_path / "kernel.json")
-    restored = ConservationKernel.load(tmp_path / "kernel.json", allow_unguarded_roots=True, clock=_Clock(T3), allow_unguarded_evidence=True)
+    restored = ConservationKernel.load(tmp_path / "kernel.json", allow_unguarded_restore=True, allow_untrusted_humans=True, allow_unguarded_roots=True, clock=_Clock(T3), allow_unguarded_evidence=True)
     assert restored.reconstruct(output.artifact_id).transformation_ids_in_order == ("tx-adopt",)
     assert [r.revocation_id for r in restored.registry.revocations_of("auth-adopt")] == ["rev-1"]
 
@@ -93,31 +93,31 @@ def test_where_humans_are_named_only_a_named_one_can_revoke():
 
 
 def test_revoking_an_authorization_the_registry_has_not_seen_yet_still_applies_when_it_arrives():
-    registry = EvidenceRegistry()
+    registry = EvidenceRegistry(allow_untrusted_humans=True)
     registry.add_revocation(_revoke(), recorded_at=T1)
     registry.add_authorization(_adoption_auth())
     assert registry.at(T2).authorization("auth-adopt") is None
 
 
 def test_a_revocation_id_is_used_once():
-    registry = EvidenceRegistry()
+    registry = EvidenceRegistry(allow_untrusted_humans=True)
     registry.add_revocation(_revoke(), recorded_at=T1)
     with pytest.raises(InvalidEvent, match="duplicate"):
         registry.add_revocation(_revoke(target="auth-other"), recorded_at=T1)
 
 
 def test_a_registry_with_no_revocations_keeps_its_old_snapshot_shape_and_one_with_them_round_trips():
-    registry = EvidenceRegistry()
+    registry = EvidenceRegistry(allow_untrusted_humans=True)
     registry.add_authorization(_adoption_auth())
     assert "revocations" not in registry.snapshot()
     registry.add_revocation(_revoke(effective_at=T3), recorded_at=T1)
-    restored = EvidenceRegistry.restore(registry.snapshot())
+    restored = EvidenceRegistry.restore(registry.snapshot(), allow_untrusted_humans=True)
     assert restored.at(T2).authorization("auth-adopt") is not None
     assert restored.at(T3).authorization("auth-adopt") is None
 
 
 def test_a_root_claim_whose_authorization_was_revoked_is_refused():
-    registry = EvidenceRegistry()
+    registry = EvidenceRegistry(allow_untrusted_humans=True)
     registry.add_authorization(AuthorizationEvent(
         authorization_id="auth-root", authorized_by=Actor.human("approver"), subject_id="p-claim",
         transition_kind=TransitionKind.AUTHORITY_ESCALATION, from_value="NONE", to_value="HUMAN_AUTHORIZED",
