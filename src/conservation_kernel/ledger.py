@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from .errors import LedgerError, RootAdmissionError, UnguardedKernelError
+from .errors import InvalidArtifact, LedgerError, RootAdmissionError, UnguardedKernelError
 from .events import TransformationRecord
 from .model import Artifact
 from .result import VerificationResult, _proof_issuer
@@ -56,7 +56,16 @@ class ConservationLedger:
         """Whether adding an initial artifact depends on a guard. Says nothing about what the guard will answer."""
         return self._root_guard is not None
 
+    @staticmethod
+    def _require_current_digest(artifact: Artifact) -> None:
+        """An artifact enters, and leaves in a snapshot, only if its stored digest still describes it."""
+        try:
+            artifact.verify_digest()
+        except InvalidArtifact as exc:
+            raise LedgerError(str(exc)) from exc
+
     def add_initial(self, artifact: Artifact, *, admitted_at: str | None = None) -> None:
+        self._require_current_digest(artifact)
         if artifact.artifact_id in self._artifacts:
             raise LedgerError(f"duplicate artifact ID {artifact.artifact_id}")
         if self._admit_root is not None:
@@ -127,6 +136,7 @@ class ConservationLedger:
     def commit(self, output: Artifact, record: TransformationRecord, result: VerificationResult) -> None:
         if not result.accepted:
             raise LedgerError("a rejected or unverifiable result cannot be committed")
+        self._require_current_digest(output)
         if result.output_artifact_id != output.artifact_id:
             raise LedgerError("result and output IDs do not match")
         if output.artifact_id in self._artifacts:
@@ -188,6 +198,8 @@ class ConservationLedger:
         return next((item for item in self._transformations.values() if item.output_artifact_id == artifact_id), None)
 
     def snapshot(self) -> dict:
+        for item in self._artifacts.values():
+            self._require_current_digest(item)
         return {
             "artifacts": [item.to_dict() for item in self._artifacts.values()],
             "transformations": [item.to_dict() for item in self._transformations.values()],

@@ -89,11 +89,9 @@ the output, the ``transformation_id``, and ``TransformationRecord.
 canonical_digest()``. The kernel already digests everything it judges
 (including ``created_at``, producers, propositions and declared changes), so
 this binds the verdict to that content and keeps the CNS-side input to str
-only. Two limits, both the kernel's own. ``artifact_digest`` is computed once,
-when an ``Artifact`` is constructed, and the nested ``metadata`` of a
-proposition is only shallow-frozen, so an artifact whose nested metadata is
-mutated in place afterwards keeps the same digest even though a verdict on it
-can change (the kernel's ``input_hashes`` check has the same blind spot).
+only. A former limit is closed: ``artifact_digest`` used to be computed once with only shallow-frozen
+nested metadata, so in-place changes went unseen. Metadata is now frozen at every depth and the digest is re-checked
+(``Artifact.verify_digest``) before it is handed to CNS or judged by the verifier.
 And the evidence registry is deliberately not in the digest: it is the
 witness the verdict was judged *against*, not the thing judged.
 
@@ -229,6 +227,7 @@ class TransformationCandidate:
 
 
 def _artifact_ref(artifact: Artifact) -> dict[str, str]:
+    artifact.verify_digest()  # the digest handed to CNS must still describe the artifact it names
     return {
         "artifact_id": artifact.artifact_id,
         "artifact_digest": str(artifact.artifact_digest),

@@ -60,6 +60,19 @@ def _plain(value: Any) -> Any:
     return value
 
 
+def _freeze(value: Any) -> Any:
+    """A deeply immutable copy of already-plain data: mappings become read-only views, lists become tuples.
+
+    `_plain` has already turned the value into dicts, lists and scalars, so this only has to rebuild each
+    container. The copy shares nothing with the caller's original, so changing the original later cannot reach it.
+    """
+    if isinstance(value, Mapping):
+        return MappingProxyType({key: _freeze(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze(item) for item in value)
+    return value
+
+
 def canonical_json(value: Any) -> str:
     return json.dumps(_plain(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
@@ -253,7 +266,7 @@ class Proposition:
             object.__setattr__(self, "temporal", TemporalMetadata.from_dict(self.temporal))
         for name in ("evidence_refs", "authorization_refs", "parent_proposition_ids", "source_refs", "conditions"):
             object.__setattr__(self, name, _tuple(getattr(self, name), field_name=name, unique=True))
-        metadata = dict(self.metadata or {})
+        metadata = self.metadata if self.metadata is not None else {}
         if self.epistemic_status in {EpistemicStatus.ESTIMATED, EpistemicStatus.SIMULATED} and not str(self.derivation_method or "").strip():
             raise InvalidArtifact(f"{self.epistemic_status.value} proposition requires a named derivation_method")
         if self.origin is OriginStatus.HUMAN_ADOPTED_MACHINE_OUTPUT and not self.authorization_refs:
@@ -264,11 +277,16 @@ class Proposition:
             raise InvalidArtifact(f"canonical state {self.canonical_state.value} requires authorization_refs")
         try:
             canonical_json(metadata)
-        except (TypeError, ValueError) as exc:
+            # A deep copy, frozen at every depth: nothing nested stays shared with the caller, and nothing can be
+            # changed afterwards, so the digest taken at construction keeps describing what the verifier reads.
+            frozen = _freeze(_plain(metadata))
+        except (TypeError, ValueError, RecursionError) as exc:
             raise InvalidArtifact(
                 f"metadata for {self.proposition_id} is not canonically serializable: {exc}"
             ) from exc
-        object.__setattr__(self, "metadata", MappingProxyType(metadata))
+        if not isinstance(frozen, Mapping):
+            raise InvalidArtifact(f"metadata for {self.proposition_id} must be a mapping")
+        object.__setattr__(self, "metadata", frozen)
 
     @property
     def canonical_digest(self) -> str:
@@ -294,7 +312,7 @@ class Proposition:
             "parent_proposition_ids": list(self.parent_proposition_ids),
             "source_refs": list(self.source_refs),
             "derivation_method": self.derivation_method,
-            "metadata": dict(self.metadata),
+            "metadata": _plain(self.metadata),
         }
         if self.conditions:
             result["conditions"] = list(self.conditions)
@@ -367,6 +385,21 @@ class Artifact:
         if self.artifact_digest is not None and self.artifact_digest != computed_artifact:
             raise InvalidArtifact(f"artifact_digest mismatch for artifact {self.artifact_id}")
         object.__setattr__(self, "artifact_digest", computed_artifact)
+
+    def verify_digest(self) -> None:
+        """Recompute both digests from what this artifact holds now and refuse if either differs from the stored one.
+
+        Metadata is frozen deeply, so this should never fire. It is the safety net at each trust boundary for a
+        change that got past that: the stored digest is a claim, and this is the check that it still holds.
+        """
+        if sha256(self.content.encode("utf-8")).hexdigest() != self.content_digest:
+            raise InvalidArtifact(f"content_digest of artifact {self.artifact_id} no longer matches its content")
+        try:
+            current = _digest(self._payload_dict())
+        except (TypeError, ValueError, RecursionError) as exc:
+            raise InvalidArtifact(f"artifact {self.artifact_id} can no longer be canonically serialized: {exc}") from exc
+        if current != self.artifact_digest:
+            raise InvalidArtifact(f"artifact_digest of artifact {self.artifact_id} no longer matches its content")
 
     def _payload_dict(self) -> dict[str, Any]:
         return {
