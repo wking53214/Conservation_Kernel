@@ -309,8 +309,9 @@ def test_only_an_accepted_status_maps_to_pass(status):
         unverifiable_properties=("independent_source_identity",),
     )
     verdict = to_cns_result(hand_built, candidate)
-    assert (verdict.outcome is PASS) is hand_built.accepted
-    assert verdict.outcome in (PASS, BREACH)
+    # A result written or altered by hand carries no valid proof, so whatever its status it is never a pass.
+    assert verdict.outcome is BREACH
+    assert "proof" in verdict.reason
     if status is VerificationStatus.UNVERIFIABLE:
         assert verdict.outcome is BREACH
         assert "UNVERIFIABLE" in verdict.reason
@@ -633,7 +634,7 @@ def test_an_accepted_result_that_lists_violations_fails_closed():
     verdict = to_cns_result(hand_built, candidate)
     assert verdict.outcome is BREACH
     assert verdict.bound()
-    assert "inconsistent" in verdict.reason and "UNDECLARED_CHANGE" in verdict.reason
+    assert "proof" in verdict.reason and "UNDECLARED_CHANGE" in verdict.reason
 
 
 def test_a_root_verdict_binds_the_content_of_the_root_not_only_its_id():
@@ -1202,3 +1203,59 @@ def test_the_two_requirements_are_independent_and_both_reasons_are_given_when_bo
     only_evidence = CnsRootAdmissionGate(ConservationKernel(root_guard=lambda a: True, allow_unguarded_evidence=True),
                                          require_guard=True, require_evidence_guard=True).check(guard_root())
     assert "no evidence guard" in only_evidence.reason and "no root guard" not in only_evidence.reason
+
+
+def _altered_output(output):
+    return Artifact(
+        output.artifact_id,
+        "altered " + output.content,
+        output.propositions,
+        output.producer,
+        parent_artifact_ids=output.parent_artifact_ids,
+        version=output.version,
+        functional_contract=output.functional_contract,
+        created_at=output.created_at,
+    )
+
+
+def test_a_proven_result_is_not_a_pass_for_the_same_ids_over_different_output_content():
+    """Backlog item 3: ids alone used to pair a result with any candidate that shared them."""
+    base, registry = build_ground_truth()
+    output, record = legitimate_transformation(base, 1)
+    result = IndependentVerifier().verify(base, output, record, registry)
+    assert to_cns_result(result, TransformationCandidate(base, output, record)).outcome is PASS
+    altered = _altered_output(output)
+    assert altered.artifact_id == output.artifact_id and altered.artifact_digest != output.artifact_digest
+    verdict = to_cns_result(result, TransformationCandidate(base, altered, record))
+    assert verdict.outcome is BREACH
+    assert "proof does not match" in verdict.reason
+
+
+def test_a_proven_result_is_not_a_pass_for_the_same_ids_over_different_input_content():
+    base, registry = build_ground_truth()
+    output, record = legitimate_transformation(base, 1)
+    result = IndependentVerifier().verify(base, output, record, registry)
+    altered_input = _altered_output(base)
+    assert altered_input.artifact_id == base.artifact_id
+    verdict = to_cns_result(result, TransformationCandidate(altered_input, output, record))
+    assert verdict.outcome is BREACH
+    assert "inputs are not the artifacts" in verdict.reason
+
+
+def test_a_proven_result_is_not_a_pass_for_the_same_ids_over_a_different_record():
+    base, registry = build_ground_truth()
+    output, record = legitimate_transformation(base, 1)
+    result = IndependentVerifier().verify(base, output, record, registry)
+    other = replace(record, reason=record.reason + " (rewritten)")
+    verdict = to_cns_result(result, TransformationCandidate(base, output, other))
+    assert verdict.outcome is BREACH
+    assert "proof does not match" in verdict.reason
+
+
+def test_a_result_with_its_proof_removed_is_never_a_pass():
+    base, registry = build_ground_truth()
+    output, record = legitimate_transformation(base, 1)
+    result = replace(IndependentVerifier().verify(base, output, record, registry), proof=None)
+    verdict = to_cns_result(result, TransformationCandidate(base, output, record))
+    assert verdict.outcome is BREACH
+    assert "no proof" in verdict.reason

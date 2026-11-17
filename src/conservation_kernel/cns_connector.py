@@ -140,7 +140,7 @@ from .kernel import STATEMENT_DIGEST_KEY, ConservationKernel
 from .ledger import ConservationLedger
 from .model import Artifact
 from .registry import EvidenceRegistry
-from .result import VerificationResult
+from .result import VerificationResult, _proof_issuer
 from .verifier import IndependentVerifier
 
 __all__ = [
@@ -356,6 +356,25 @@ def _require_describes(result: VerificationResult, candidate: TransformationCand
         )
 
 
+def _unproven_reason(result: VerificationResult, candidate: TransformationCandidate) -> str:
+    """Why `result` cannot be shown to judge exactly this candidate's content; empty when it can.
+
+    The verifier stamps each result with a proof over the result, the record and the output it judged. Both must
+    match the candidate, and the inputs the candidate carries must be the ones the record names by digest.
+    """
+    if result.proof is None:
+        return "the result carries no proof that the verifier produced it for this content"
+    try:
+        issuer = _proof_issuer(result, candidate.record, candidate.output)
+    except (TypeError, ValueError, RecursionError):
+        return "the candidate's record cannot be digested, so no proof can cover it"
+    if issuer is None:
+        return "the result's proof does not match this candidate's record and output"
+    if tuple(candidate.record.input_hashes) != tuple(item.artifact_digest for item in candidate.inputs):
+        return "the candidate's inputs are not the artifacts its record names by digest"
+    return ""
+
+
 def to_cns_result(
     result: VerificationResult,
     candidate: TransformationCandidate,
@@ -370,13 +389,12 @@ def to_cns_result(
     ``result`` was issued for a different transformation (or other ids) than
     ``candidate``.
 
-    The binding is only as good as the caller's pairing. A
-    ``VerificationResult`` carries ids and no content digest, so a result
-    issued for the same ids over *different* content cannot be detected here,
-    and would be bound to the content of ``candidate``, which was never
-    verified. Pair a result with the candidate it was computed from, or use
-    :class:`CnsGate`, :func:`verify_to_cns` or :func:`submit_to_cns`, which run
-    the verifier on the very candidate they bind.
+    A ``PASS`` needs the verifier's proof. The result must carry the proof the verifier stamped on it, and it must
+    match this candidate's record and output (so a result for the same ids over *different* content, or a hand-built
+    result, is a breach, not a pass), and the candidate's inputs must be the ones the record names by digest.
+    Results restored from a snapshot carry no proof, so they map to a breach here too: they are history only.
+    :class:`CnsGate`, :func:`verify_to_cns` and :func:`submit_to_cns` run the verifier on the very candidate they
+    bind.
     """
     return _to_cns_result(result, candidate, subject, "")
 
@@ -395,7 +413,13 @@ def _to_cns_result(
         )
     _require_describes(result, candidate)
     reason = _reason(result)
-    if result.accepted and result.violations:
+    unproven = _unproven_reason(result, candidate)
+    if unproven:
+        # Same ids is not same content. A verdict the verifier did not reach for exactly this record, output and
+        # inputs is never a pass, whatever status it carries.
+        outcome = cns_gate.GateOutcome.TERMINAL_BREACH
+        reason = f"{unproven}; {reason}"
+    elif result.accepted and result.violations:
         # An accepted status that also lists violations is not a verdict the
         # kernel produces. Do not read only .accepted and pass it.
         outcome = cns_gate.GateOutcome.TERMINAL_BREACH
