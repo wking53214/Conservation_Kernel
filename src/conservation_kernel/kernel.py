@@ -315,7 +315,8 @@ class ConservationKernel:
                       require_content_bound: bool = False,
                       allow_unguarded_evidence: bool = False,
                       allow_untrusted_humans: bool = False,
-                      allow_unguarded_restore: bool = False) -> "ConservationKernel":
+                      allow_unguarded_restore: bool = False,
+                      restore_root_check: Callable[[Artifact], bool] | None = None) -> "ConservationKernel":
         """A kernel continuing from `snapshot()`.
 
         The digest is checked first (corruption). Then, with `reverify`, every
@@ -331,6 +332,12 @@ class ConservationKernel:
         configured: it is not run on the restored roots (a one-use permission would be spent), so `reverify` and the
         signature, not the guard, are what vouch for them. Likewise the registry refuses authorizations and
         delegations unless `trusted_humans` is given or `allow_untrusted_humans=True`.
+
+        `restore_root_check` is what puts the question the guard answers to every restored root without spending
+        anything. It is your own yes/no function of the root (for example "is this id and digest on our approved
+        list"), and it must only look: it is called once for each root in the file, whether or not `reverify` is on.
+        Anything but exactly `True`, or an exception, refuses the whole snapshot (`SnapshotIntegrityError`), so a file
+        cannot plant a root the deployment would not have admitted. With none (the default) nothing changes.
         """
         body = dict(snapshot)
         signature = body.pop("signature", None)
@@ -354,6 +361,18 @@ class ConservationKernel:
         kernel = cls(registry=registry, ledger=ledger, allow_unguarded_roots=allow_unguarded_roots, clock=clock,
                      refuse_inactive_root_evidence=refuse_inactive_root_evidence,
                      allow_unguarded_evidence=allow_unguarded_evidence)
+        if restore_root_check is not None:
+            for artifact in ledger.artifacts():
+                if artifact.parent_artifact_ids:
+                    continue
+                try:
+                    approved = restore_root_check(artifact) is True
+                except Exception:  # a check that cannot answer never approves
+                    approved = False
+                if not approved:
+                    raise SnapshotIntegrityError(
+                        f"root {artifact.artifact_id} was refused by the restore_root_check; the snapshot is not restored"
+                    )
         if reverify:
             kernel.reverify()
         return kernel
