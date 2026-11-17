@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `to_cns_result` now needs the verifier's proof before it will say `PASS`. A `VerificationResult` carried ids and no
+  content digest, so a result for the same ids over different content (or a hand-built one) could be bound to a
+  candidate it never judged. The result's proof must now match the candidate's record and output, and the candidate's
+  inputs must be the artifacts its record names by digest; anything else is a `TERMINAL_BREACH` with the reason
+  stated. `CnsGate`, `verify_to_cns` and `submit_to_cns` run the verifier themselves and are unchanged. **Behavior
+  change:** a hand-built or snapshot-restored result is no longer a `PASS` through `to_cns_result`.
+
 - `Proposition.metadata` is now frozen at every depth. It was a read-only view over a shallow copy, so a nested list
   or dictionary could be changed in place (by anyone holding the proposition, or the caller's original dictionary),
   and the artifact digest taken at construction kept vouching for content that had changed. The metadata is now a
