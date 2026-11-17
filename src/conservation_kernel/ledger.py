@@ -223,7 +223,8 @@ class ConservationLedger:
         roots when no `root_guard` is configured, raising `UnguardedKernelError`, unless `allow_unguarded_restore=True`
         says that is deliberate. It does not run the guard on the restored roots (a one-use permission would be spent
         and the roots were decided when first registered), so a configured guard is a precondition, not a
-        re-authorization. Whether the roots and lineage hold up is `ConservationKernel.reverify`'s question."""
+        re-authorization. Whether the roots and lineage hold up is `ConservationKernel.reverify`'s question, and a deployer's
+        own check of each restored root is `ConservationKernel.from_snapshot(restore_root_check=...)`."""
         ledger = cls(root_guard=root_guard)
         for item in snapshot.get("artifacts", []):
             artifact = Artifact.from_dict(item)

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `ConservationKernel.from_snapshot(restore_root_check=...)` puts every restored root to a deployer-supplied yes/no
+  check. A restore required a root guard to exist but never ran it on the restored roots (it may be a one-use
+  permission, and rerunning it would spend it). The check is separate, must only look, and is called once for each
+  root whether or not `reverify` is on; anything but exactly `True`, or an exception, refuses the whole snapshot with
+  `SnapshotIntegrityError`. Optional and off by default, so nothing changes until a deployer passes one.
+
 - Nobody who records a revocation chooses the time it is recorded at. `EvidenceRegistry.add_revocation(event,
   recorded_at=...)` took the time from the caller, so a revocation could be recorded in the past and reach back over
   decisions already made (measured: one recorded in 2001 was accepted). **Breaking:** `add_revocation(event)` now takes
