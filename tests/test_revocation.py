@@ -88,29 +88,29 @@ def test_only_a_human_can_revoke():
 def test_where_humans_are_named_only_a_named_one_can_revoke():
     registry = EvidenceRegistry(trusted_humans={"adopter"})
     with pytest.raises(InvalidEvent, match="does not recognise"):
-        registry.add_revocation(_revoke(by=Actor.human("stranger")), recorded_at=T1)
-    registry.add_revocation(_revoke(), recorded_at=T1)
+        registry._record_revocation(_revoke(by=Actor.human("stranger")), T1)
+    registry._record_revocation(_revoke(), T1)
 
 
 def test_revoking_an_authorization_the_registry_has_not_seen_yet_still_applies_when_it_arrives():
     registry = EvidenceRegistry(allow_untrusted_humans=True)
-    registry.add_revocation(_revoke(), recorded_at=T1)
+    registry._record_revocation(_revoke(), T1)
     registry.add_authorization(_adoption_auth())
     assert registry.at(T2).authorization("auth-adopt") is None
 
 
 def test_a_revocation_id_is_used_once():
     registry = EvidenceRegistry(allow_untrusted_humans=True)
-    registry.add_revocation(_revoke(), recorded_at=T1)
+    registry._record_revocation(_revoke(), T1)
     with pytest.raises(InvalidEvent, match="duplicate"):
-        registry.add_revocation(_revoke(target="auth-other"), recorded_at=T1)
+        registry._record_revocation(_revoke(target="auth-other"), T1)
 
 
 def test_a_registry_with_no_revocations_keeps_its_old_snapshot_shape_and_one_with_them_round_trips():
     registry = EvidenceRegistry(allow_untrusted_humans=True)
     registry.add_authorization(_adoption_auth())
     assert "revocations" not in registry.snapshot()
-    registry.add_revocation(_revoke(effective_at=T3), recorded_at=T1)
+    registry._record_revocation(_revoke(effective_at=T3), T1)
     restored = EvidenceRegistry.restore(registry.snapshot(), allow_untrusted_humans=True)
     assert restored.at(T2).authorization("auth-adopt") is not None
     assert restored.at(T3).authorization("auth-adopt") is None

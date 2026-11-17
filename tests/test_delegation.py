@@ -128,8 +128,8 @@ def test_an_authorization_stops_counting_when_its_delegation_ends():
 
 def test_revoking_the_delegation_cuts_off_what_was_issued_under_it():
     registry = _registry(_delegation(), auth=_auth())
-    registry.add_revocation(RevocationEvent(revocation_id="rev-d", authorization_id="del-1",
-                                            revoked_by=Actor.human("lead"), reason="role ended"), recorded_at=T2)
+    registry._record_revocation(RevocationEvent(revocation_id="rev-d", authorization_id="del-1",
+                                            revoked_by=Actor.human("lead"), reason="role ended"), T2)
     assert registry.at(T1).authorization("auth-adopt") is not None
     assert registry.at(T3).authorization("auth-adopt") is None
 
@@ -195,8 +195,8 @@ def test_only_the_delegate_can_re_delegate():
 def test_revoking_a_parent_cuts_off_the_whole_chain_beneath_it():
     parent, child = _redelegated()
     registry = _registry(parent, child, auth=_auth(by="deputy", under="del-2"))
-    registry.add_revocation(RevocationEvent(revocation_id="rev-p", authorization_id="del-1",
-                                            revoked_by=Actor.human("lead"), reason="role ended"), recorded_at=T2)
+    registry._record_revocation(RevocationEvent(revocation_id="rev-p", authorization_id="del-1",
+                                            revoked_by=Actor.human("lead"), reason="role ended"), T2)
     assert registry.at(T3).authorization("auth-adopt") is None
 
 

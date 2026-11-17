@@ -97,10 +97,15 @@ class ConservationKernel:
             raise ValueError("pass require_content_bound to the registry you supply, not to the kernel as well")
         if allow_untrusted_humans and registry is not None:
             raise ValueError("pass allow_untrusted_humans to the registry you supply, not to the kernel as well")
+        self.clock = clock or utc_now
         self._registry = registry or EvidenceRegistry(evidence_guard=evidence_guard,
                                                       require_content_bound=require_content_bound,
-                                                      allow_untrusted_humans=allow_untrusted_humans)
-        self.clock = clock or utc_now
+                                                      allow_untrusted_humans=allow_untrusted_humans,
+                                                      clock=self.clock)
+        if self._registry._clock is None:
+            # A registry with no clock of its own is stamped by this kernel's, so its revocations are never timed by
+            # the caller. One built with its own clock keeps it.
+            self._registry._clock = self.clock
         self.verifier = verifier or IndependentVerifier()
         self._ledger = ledger or ConservationLedger(root_guard=root_guard)
         if not self.ledger.has_root_guard and not allow_unguarded_roots:
@@ -240,7 +245,7 @@ class ConservationKernel:
 
     def revoke(self, event: RevocationEvent) -> None:
         """Record a revocation as of this kernel's clock (see `EvidenceRegistry.add_revocation`)."""
-        self.registry.add_revocation(event, recorded_at=self._now())
+        self.registry._record_revocation(event, self._now())
 
     def register_root(self, artifact: Artifact) -> None:
         # The ledger asks `admit_root` itself, as of the time given here, so this door and `ledger.add_initial` agree.
