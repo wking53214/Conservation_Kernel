@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Nobody who records a revocation chooses the time it is recorded at. `EvidenceRegistry.add_revocation(event,
+  recorded_at=...)` took the time from the caller, so a revocation could be recorded in the past and reach back over
+  decisions already made (measured: one recorded in 2001 was accepted). **Breaking:** `add_revocation(event)` now takes
+  no time and stamps with the registry's own `clock`, which a `ConservationKernel` supplies to any registry it holds
+  that has none; a registry with no clock and no kernel refuses. `ConservationKernel.revoke` and snapshot restore are
+  unchanged in behavior (the kernel's clock, and the recorded times the signed snapshot carries).
+
 - `to_cns_result` now needs the verifier's proof before it will say `PASS`. A `VerificationResult` carried ids and no
   content digest, so a result for the same ids over different content (or a hand-built one) could be bound to a
   candidate it never judged. The result's proof must now match the candidate's record and output, and the candidate's

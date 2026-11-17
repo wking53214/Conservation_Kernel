@@ -25,8 +25,14 @@ class EvidenceRegistry:
                  require_bounded: bool = False,
                  evidence_guard: Callable[[EvidenceRecord], bool] | None = None,
                  require_content_bound: bool = False,
-                 allow_untrusted_humans: bool = False) -> None:
-        """`trusted_humans` names the actor ids whose authorizations and delegations this registry accepts. With none
+                 allow_untrusted_humans: bool = False,
+                 clock: Callable[[], str] | None = None) -> None:
+        """`clock` is the registry's own recording clock: it stamps every revocation, so a caller never chooses the
+        time one is recorded at. A kernel gives any registry it holds that has no clock its own clock, so a revocation
+        is always timed by the deployer's clock and never by the caller. A registry used with no kernel and no clock
+        refuses `add_revocation`.
+
+        `trusted_humans` names the actor ids whose authorizations and delegations this registry accepts. With none
         given, the registry refuses every authorization and delegation (`InvalidEvent`), because it cannot know who is
         human: `Actor.kind == HUMAN` is a self-declaration. Passing `allow_untrusted_humans=True` says that is
         deliberate and restores the old behaviour (any actor labelled human is accepted). The flag is greppable on
@@ -58,6 +64,7 @@ class EvidenceRegistry:
         # (`subject_digest`); one that does not is refused, live and on restore, and never counts.
         self.require_content_bound = require_content_bound
         self._evidence_guard = evidence_guard
+        self._clock = clock
         # Names this registry in the proof on a verification result, so a verdict reached against some other registry
         # cannot be passed off as this one's. Random per instance and never written to a snapshot.
         self._issuer = secrets.token_hex(16)
@@ -185,13 +192,22 @@ class EvidenceRegistry:
             current = self._delegations.get(current.parent_delegation_id) if current.parent_delegation_id else None
         return chain
 
-    def add_revocation(self, event: RevocationEvent, *, recorded_at: str) -> None:
+    def add_revocation(self, event: RevocationEvent) -> None:
+        """Record `event` as of this registry's own clock. The caller cannot choose the time: a recording time set
+        earlier than the truth would let a revocation reach back over decisions already made, so the time is never
+        a parameter. A registry with no clock refuses; record through `ConservationKernel.revoke` instead."""
+        if self._clock is None:
+            raise InvalidEvent(
+                f"revocation {event.revocation_id} refused: this registry has no clock of its own to record it at. "
+                "Record it through ConservationKernel.revoke, or build the registry with clock=..."
+            )
+        self._record_revocation(event, self._clock())
+
+    def _record_revocation(self, event: RevocationEvent, recorded_at: str) -> None:
         """Record `event` as of `recorded_at` (ISO 8601 with offset), the recording clock's time.
 
-        `recorded_at` is trusted as given, like everything else written to this registry: whoever can write it is
-        the deployer. A recording time set earlier than the truth would let a revocation reach back over decisions
-        already made. Record through `ConservationKernel.revoke`, which uses the kernel's own clock.
-
+        Private: it takes the time as given. It is for the kernel, which passes its own clock, and for restoring a
+        snapshot, whose recorded times the kernel itself wrote and the snapshot digest and signature vouch for.
         The revoker must be a human this registry trusts, where it names them. The authorization need not be here
         yet: a revocation that arrives first still applies when it does. A revocation whose `effective_at` is before
         `recorded_at` is refused, because applying it would re-judge decisions already made under the authorization
@@ -356,7 +372,7 @@ class EvidenceRegistry:
         for item in snapshot.get("authorizations", []):
             registry.add_authorization(AuthorizationEvent.from_dict(item))
         for item in snapshot.get("revocations", []):
-            registry.add_revocation(RevocationEvent.from_dict(item["revocation"]), recorded_at=item["recorded_at"])
+            registry._record_revocation(RevocationEvent.from_dict(item["revocation"]), item["recorded_at"])
         return registry
 
 
