@@ -18,6 +18,7 @@ from .enums import (
     VerificationStatus,
 )
 from .events import TransformationRecord
+from .errors import InvalidArtifact
 from .model import Artifact, Proposition, canonical_json
 from .registry import EvidenceRegistry, RegistryAt
 from .result import ObservedChange, VerificationResult, Violation, _issue_proof
@@ -106,6 +107,11 @@ class IndependentVerifier:
             violation("OUTPUT_ID_MISMATCH", Dimension.LINEAGE, output.artifact_id, "record output_artifact_id does not match output artifact")
         if tuple(record.input_artifact_ids) != tuple(item.artifact_id for item in inputs):
             violation("INPUT_ID_MISMATCH", Dimension.LINEAGE, output.artifact_id, "record input IDs do not match verifier inputs")
+        for held in (*inputs, output):
+            try:
+                held.verify_digest()
+            except InvalidArtifact as exc:
+                violation("ARTIFACT_DIGEST_STALE", Dimension.LINEAGE, held.artifact_id, f"the stored digest no longer describes the artifact: {exc}")
         if tuple(record.input_hashes) != tuple(item.artifact_digest for item in inputs):
             violation("INPUT_HASH_MISMATCH", Dimension.LINEAGE, output.artifact_id, "record input hashes do not match recomputed artifact digests")
         if record.output_hash != output.artifact_digest:

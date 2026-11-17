@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- `Proposition.metadata` is now frozen at every depth. It was a read-only view over a shallow copy, so a nested list
+  or dictionary could be changed in place (by anyone holding the proposition, or the caller's original dictionary),
+  and the artifact digest taken at construction kept vouching for content that had changed. The metadata is now a
+  deep copy: mappings become read-only views and lists become tuples. Digests and JSON are unchanged, so existing
+  artifacts and snapshots still verify; `to_dict()` returns plain, editable copies. A self-referencing or too deeply
+  nested metadata is refused as `InvalidArtifact`. **Behavior change:** nested lists in `metadata` read back as tuples.
+- `Artifact.verify_digest()` recomputes both digests and refuses if either differs from the stored one. It runs in the
+  verifier (a stale input or output is rejected with `ARTIFACT_DIGEST_STALE`), when the ledger admits a root or
+  commits an output, when the ledger snapshots, and when an artifact is handed to CNS. The freeze should make it
+  never fire; it is the check that the stored digest still holds.
+
 - **Breaking:** authorizing and restoring now refuse unless the deployer says something or opts out out loud, the
   pattern `allow_unguarded_roots` and `allow_unguarded_evidence` already use. (1) A registry with no `trusted_humans`
   refuses `add_authorization` and `add_delegation` (`InvalidEvent`) unless built with `allow_untrusted_humans=True`;
