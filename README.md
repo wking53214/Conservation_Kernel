@@ -4,6 +4,19 @@ Independently testable **hostile baseline** for transformation conservation. It 
 
 Version 0.3.0, not yet tagged (`CHANGELOG.md` lists it under Unreleased). Stdlib only. Python 3.11 or later. Consumers install it by commit, not by tag.
 
+Status: experiment, hostile baseline. Last checked 2026-11-19 at commit `8ed1636` (reviewed 2026-11-15 at `cc42d3f`, 8 commits earlier). License: Apache-2.0.
+
+## Role Within ≡TACK
+
+- **What it is.** A stdlib-only library that checks whether a transformation preserved protected epistemic and provenance distinctions. A verifier recomputes the observed changes and returns PASS, PASS_WITH_DECLARED_TRANSFORMATION, REJECT or UNVERIFIABLE.
+- **What it owns.** Evaluation of a transformation, an in-memory append-only ledger, and the lifecycle checks on registered authorizations, delegations and revocations.
+- **What it contributes.** The third stage of the evidence spine: it judges a root artifact before it becomes ancestry.
+- **What it does not own.** Truth, policy permission, issuing authorizations, executing anything, durable custody, key custody, or preventing a caller that skips it. Evaluation here is not enforcement: a downstream system that never calls `submit` is not stopped.
+- **Depends on.** Python standard library only. CNS is optional (section 7).
+- **Depended on by.** Declared: observe-perceive, sentinel_os and GEMS pin it by commit (section 3, dated 2026-11-08). Phase 0 reported that the guard changes (root and evidence guards required, 2026-10-29) break tests in several consumers pinned before them. Not re-checked here.
+- **Verified versus declared.** The five-repo chain below is a design order. The only link measured end to end was by a CNS script on 2026-11-08 at older commits; Phase 0 reported that the same script fails at current commits (REPORTED). Re-run 2026-11-16 at each repo's main (CNS `c84ef8c`, which is v4.1.0 and not the v4.0.0 pin; HERALD `75c17ef`; TIE `9d3ad38`; this repo `cc42d3f`; Governance_Gateway `5dead3c`; CCC `2379de8`): 56 checks passed, none failed, three gaps recorded by the script (EXECUTED). That run needed UAI-2 (`cns_interop`) on the path as well; with only the five repos the script stops at an import error (EXECUTED). Treat links other than the ones your own run shows as declared.
+- **Governance and control design.** Authority stays outside the kernel: registries, guards and the clock are supplied by the deployer, and the kernel's verdict is evidence for a gate, not a grant.
+
 ## 1. Position in the spine
 
 The kernel is the third of five repositories in the evidence spine. One document passes through them in order:
@@ -20,6 +33,8 @@ HERALD ──signed export──> TIE ──evidence──> Conservation_Kernel 
 - **Conservation_Kernel** (this repo) judges a root artifact built from that evidence before it becomes ancestry.
 - **Governance_Gateway** judges the artifact at its admission door.
 - **CCC** judges the attempt to ingest into its store.
+
+The arrows are a design order, not shipped wiring. None of the five repositories ships the step from TIE evidence to a kernel root, or the step from a kernel root to a Gateway artifact. The CNS script `chains/evidence_spine.py` writes both steps itself and says so in its own header (INSPECTED 2026-11-16). The three middle hand-offs are also shipped as library functions in the Spine repository (`spine.evidence`, `spine.door`, `spine.ccc`). Spine passes its own 41 tests at its pinned versions and has no running service (EXECUTED 2026-11-19 at Spine `7717f12`); it pins this repo at `cc42d3f`, 8 commits behind main.
 
 Wider pipeline (described by sentinel_os; an order, not an import chain): the kernel sits after the policy decision and before trusted downstream use or execution (`Admission → Observe/Keys → Locks → PERCEIVE → Decision → Conservation → Execution → Custody`).
 
@@ -93,8 +108,8 @@ Known gaps:
 | `registry.add_authorization`, `add_delegation`, `revoke` | `add_authorization` and `add_delegation` accept only a human in `trusted_humans`; `revoke` checks it when the deployer sets it. With `trusted_humans` unset, authorizations and delegations are refused (`InvalidEvent`) unless `allow_untrusted_humans=True` says that any actor labelled human is acceptable. An authorization with a `subject_digest` counts only for that proposition. |
 | `registry.add_evidence` | With an `evidence_guard`, a record is added only if the guard answers exactly `True`. Snapshot-restored evidence goes through the guard too. A kernel refuses to be built without one unless `allow_unguarded_evidence=True`. A bare `EvidenceRegistry` takes any caller's evidence. |
 | `ledger.record_rejection` | Takes only a verifier result whose proof checks, for the record and output given. |
-| Times on roots and transformations | Set by the kernel's clock. There is no public door to stamp a time. |
-| `from_snapshot`, `load` | Digest check and re-verification. A signature is checked only if the loader passes a signer. A snapshot that holds roots is refused unless a root guard is configured or `allow_unguarded_restore=True`; the guard is not run on the restored roots, only required to exist. The registry rules above apply on restore too. |
+| Times on roots and transformations | Through the kernel, set by the kernel's clock. `ConservationLedger.add_initial(artifact, admitted_at=...)` is public and records the time the caller gives, so a caller with direct ledger access can backdate a root, which puts it outside later revocations. Phase 0 reported a revoked authorization honoured this way (REPORTED; not re-run here). `record_times` is private since the Unreleased changes. |
+| `from_snapshot`, `load` | Digest check and re-verification. A signature is checked only if the loader passes a signer. A snapshot that holds roots is refused unless a root guard is configured or `allow_unguarded_restore=True`; the guard is not run on the restored roots, only required to exist. Since `b73782d` (2026-11-16) a deployer can pass `restore_root_check=` to have every restored root checked; it is optional and off by default (INSPECTED in `CHANGELOG.md` and `tests/test_restore_root_check.py`). The registry rules above apply on restore too. |
 
 Evidence is the first open door to get an optional caller permission, because the verifier trusts evidence to approve strong claims. Whether `submit` should get one too is an open decision for the owner. The CNS evidence spine does pass an evidence guard (TIE's `tie_evidence_guard`, built in the spine script). Whether that guard is independently trustworthy is a deployment question this repo does not prove.
 
@@ -106,11 +121,11 @@ Measured 2026-11-08 on Python 3.13, at main `00b0031`, from the repo root. The c
 |---|---|
 | Version | 0.3.0 (`pyproject.toml`, `__version__`, and `ConservationKernel.version`, which snapshots record as `kernel_version`). |
 | Tag and release | None. The changelog has no 0.2.0 or 0.3.0 heading. Tagging is the owner's decision. |
-| Tests, no CNS | `python3 -m pytest -q`: 285 passed, 4 skipped (connector tests skip without CNS). |
-| Tests, with CNS | 440 passed, 0 skipped. The CNS pin is `v4.0.0`. |
+| Tests, no CNS | `python3 -m pytest -q`: 285 passed, 4 skipped (connector tests skip without CNS) at `00b0031`. EXECUTED again 2026-11-15 at `cc42d3f`: 294 passed, 4 skipped. EXECUTED 2026-11-19 at `8ed1636`: 329 passed, 4 skipped. |
+| Tests, with CNS | 440 passed, 0 skipped. The CNS pin is `v4.0.0`. EXECUTED 2026-11-19 at `8ed1636` with CNS 4.0.0: 488 passed, 0 skipped. |
 | CI on main | Green on `a03f237` (2026-11-10): four jobs on Python 3.11 and 3.12. `test` runs the suite, the experiment and ruff with only the dev extra installed, so connector tests skip. `cns` installs the CNS extra and sets `CONSERVATION_KERNEL_REQUIRE_CNS=1`, so connector tests must run and a missing CNS fails the job. The test counts in section 5 were measured at `00b0031` and re-confirmed at `a03f237`. |
 
-The suite must run from the repo root. `test_experiment.py` reads a relative path and fails from any other directory.
+A passing suite shows the tested behaviors hold. It is not universal security. The suite must run from the repo root. `test_experiment.py` reads a relative path and fails from any other directory.
 
 The experiment (`PYTHONPATH=src python3 experiments/run_experiment.py`) is a simulated control and treatment. It is **not** a population claim about LLMs.
 
@@ -156,12 +171,12 @@ resolve([verdict])       # PASS or TERMINAL_BREACH, fail-closed
 
 Limits of the connector:
 
-- `artifact_digest` is computed at construction, and nested metadata is only shallow-frozen. In-place mutation of nested metadata keeps the digest while a verdict can change.
-- `VerificationResult` carries ids, not a content digest. A result can be bound to content it was not computed from. Pair a result with its candidate, or use `CnsGate`, `verify_to_cns` or `submit_to_cns`, which run the verifier on the candidate they bind.
+- `artifact_digest` is computed at construction. Until `9dc9541` (2026-11-16) nested metadata was only shallow-frozen, so it could be changed in place under an unchanged digest. It is now frozen at every depth, and `Artifact.verify_digest()` re-checks the stored digest (EXECUTED 2026-11-19: three in-place changes to nested metadata were refused, and a later change to the caller's own dictionary did not reach the proposition).
+- Until `dd3e267` (2026-11-16) a `VerificationResult` carried ids and no content digest, so `to_cns_result` could bind a result to content it was not computed from. It now needs the verifier's proof over the exact record, output and inputs, and anything else is a `TERMINAL_BREACH` (INSPECTED in `cns_connector.py`; the connector's tests for this pass). A hand-built or snapshot-restored result is no longer a `PASS` through `to_cns_result`. `CnsGate`, `verify_to_cns` and `submit_to_cns` run the verifier themselves, as before.
 - A consumer with a stricter policy must read the reason. `sentinel_os`'s `ConservationGateway` is stricter than this connector. The connector does not split rejections or refuse unverifiable properties beyond the kernel's own `.accepted`.
 - A `DeclaredChange` with NaN or infinity is never turned into a `PASS`. The kernel rejects it, or the ledger refuses to commit its result.
 - `cns_chain(...).complete()` is `False` by design. The two gates judge different candidates, so run `CnsRootAdmissionGate` on its own, on a root artifact.
 
 CI covers CNS in two jobs. The `test` job installs only `.[dev]`, so the connector tests skip there. The `cns` job installs the extra and requires CNS, so those tests run and cannot skip silently. To run them locally, install the extra first.
 
-Apache-2.0.
+Maintainer: William N. King.

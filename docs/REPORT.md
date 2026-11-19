@@ -23,3 +23,5 @@ governance is made.
 Verification for this table: measured 2026-11-08 at main `00b0031`. Without CNS,
 285 passed and 4 skipped; with CNS, 440 passed. The classifications were not
 re-derived for this date. The external GEMS reference is not re-verified here.
+
+Re-run 2026-11-15 at `cc42d3f`: 294 passed, 4 skipped without CNS. Re-run 2026-11-19 at `8ed1636`: 329 passed, 4 skipped without CNS; 488 passed with CNS. The classifications above were not re-derived.
