@@ -122,7 +122,7 @@ Measured 2026-11-08 on Python 3.13, at main `00b0031`, from the repo root. The c
 | Version | 0.3.0 (`pyproject.toml`, `__version__`, and `ConservationKernel.version`, which snapshots record as `kernel_version`). |
 | Tag and release | None. The changelog has no 0.2.0 or 0.3.0 heading. Tagging is the owner's decision. |
 | Tests, no CNS | `python3 -m pytest -q`: 285 passed, 4 skipped (connector tests skip without CNS) at `00b0031`. EXECUTED again 2026-11-15 at `cc42d3f`: 294 passed, 4 skipped. EXECUTED 2026-11-19 at `8ed1636`: 329 passed, 4 skipped. |
-| Tests, with CNS | 440 passed, 0 skipped. The CNS pin is `v4.0.0`. EXECUTED 2026-11-19 at `8ed1636` with CNS 4.0.0: 488 passed, 0 skipped. |
+| Tests, with CNS | 440 passed, 0 skipped. The CNS pin is `v4.1.0`. EXECUTED 2026-11-19 at `8ed1636` with CNS 4.0.0: 488 passed, 0 skipped. |
 | CI on main | Green on `a03f237` (2026-11-10): four jobs on Python 3.11 and 3.12. `test` runs the suite, the experiment and ruff with only the dev extra installed, so connector tests skip. `cns` installs the CNS extra and sets `CONSERVATION_KERNEL_REQUIRE_CNS=1`, so connector tests must run and a missing CNS fails the job. The test counts in section 5 were measured at `00b0031` and re-confirmed at `a03f237`. |
 
 A passing suite shows the tested behaviors hold. It is not universal security. The suite must run from the repo root. `test_experiment.py` reads a relative path and fails from any other directory.
