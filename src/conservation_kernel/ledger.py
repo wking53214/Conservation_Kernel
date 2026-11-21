@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from .errors import InvalidArtifact, LedgerError, RootAdmissionError, UnguardedKernelError
-from .events import TransformationRecord
+from .events import TransformationRecord, instant
 from .model import Artifact
 from .result import VerificationResult, _proof_issuer
 
@@ -68,6 +68,7 @@ class ConservationLedger:
         self._require_current_digest(artifact)
         if artifact.artifact_id in self._artifacts:
             raise LedgerError(f"duplicate artifact ID {artifact.artifact_id}")
+        self._require_not_backdated(admitted_at)
         if self._admit_root is not None:
             # Whatever door a root comes through, it is held to what the registry backs. Asked before the parent check
             # and the guard, so a forged root is reported as a root refusal, and a one-use permission is not spent on a
@@ -92,6 +93,19 @@ class ConservationLedger:
             self._tell_root_guard("abort")  # a yes was given and nothing was written: the guard may give it back
             raise
         self._tell_root_guard("commit")
+
+    def _require_not_backdated(self, admitted_at: str | None) -> None:
+        """A root's time may not be earlier than a time this ledger already holds. Without this, a caller with direct
+        ledger access could give a root an earlier time than the history already written, which puts it outside a
+        revocation recorded since. It does not stop a time chosen on a ledger that holds no times yet."""
+        if admitted_at is None:
+            return
+        held = [*self._admitted_at.values(), *self._verified_at.values()]
+        if not held:
+            return
+        latest = max(instant(moment, "recorded time") for moment in held)
+        if instant(admitted_at, "admitted_at") < latest:
+            raise LedgerError("admitted_at is earlier than a time this ledger already holds; a root cannot be backdated")
 
     def _tell_root_guard(self, how: str) -> None:
         """Tell a root guard that offers `commit` and `abort` how the write it permitted ended. A guard with neither is
