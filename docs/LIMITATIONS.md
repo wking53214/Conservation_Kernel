@@ -28,9 +28,11 @@ One path sits outside these guarantees because it is the deployer's own. A root 
 transformation written straight to the ledger (not through the kernel) carries
 no time until the kernel first re-verifies it, so a revocation recorded before
 that reload reaches it. `ConservationLedger.add_initial(..., admitted_at=...)` is
-also public and takes the caller's time. A caller with direct ledger access can
-backdate a root past a revocation; a deployer must not hand out ledger access
-(Phase 0 reported this as demonstrated; not re-run on 2026-11-15).
+also public and takes the caller's time. It now refuses a time earlier than one the
+ledger already holds (EXECUTED 2026-11-21), but a ledger with no times yet still
+takes any time, so a caller with direct ledger access can backdate the first root
+past a revocation; a deployer must not hand out ledger access (Phase 0 reported
+the original form as demonstrated; not re-run on 2026-11-15).
 
 The verifier is conservative. Any change to a proposition's source references
 is refused, because the kernel has no independent source-identity protocol, and

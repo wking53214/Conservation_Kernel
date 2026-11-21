@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `ConservationLedger.add_initial(..., admitted_at=...)` refuses a time earlier than any admission or verification time the
+  ledger already holds, and raises `LedgerError`. The same moment is allowed. A ledger that holds no times yet still takes
+  any time, so this narrows the backdating door without closing it.
+
 - `ConservationKernel.from_snapshot(restore_root_check=...)` puts every restored root to a deployer-supplied yes/no
   check. A restore required a root guard to exist but never ran it on the restored roots (it may be a one-use
   permission, and rerunning it would spend it). The check is separate, must only look, and is called once for each
